@@ -1,3 +1,45 @@
+# Robosuite for Tommoro-AI
+- written by virtualkss@snu.ac.kr
+- Ubuntu 22.04 LTS
+- Python 3.9
+- torch 2.4.0, CUDA 12.4
+```bibtex
+# clone this repo
+git clone https://github.com/Tommoro-AI/rs4tmr.git
+cd rstmr
+
+# install miniconda (Anaconda)
+~~
+# install nvidia-drivers
+## https://rain-bow.tistory.com/entry/CUDA-ERROR-nvidia-smi-has-failed-because-it-couldnt-communicate-with-the-nvidia-driver
+sudo ubuntu-drivers autoinstall
+sudo reboot
+# install CUDA Toolkit 12.4
+## https://developer.nvidia.com/cuda-12-4-0-download-archive
+## https://cow-kite24.tistory.com/331
+## https://www.cherryservers.com/blog/how-to-install-gcc-on-ubuntu
+sudo apt install gcc
+wget https://developer.download.nvidia.com/compute/cuda/12.4.0/local_installers/cuda_12.4.0_550.54.14_linux.run
+sudo sh cuda_12.4.0_550.54.14_linux.run
+## install without driver and kernel
+sudo sh -c "echo 'export PATH=$PATH:/usr/local/cuda-12.4/bin' >> /etc/profile"
+sudo sh -c "echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-12.4/lib64' >> /etc/profile"
+sudo sh -c "echo 'export CUDADIR=/usr/local/cuda-12.4' >> /etc/profile"
+source /etc/profile
+nvcc --version
+sudo restart
+
+# setting virtual environment
+conda create -n rs4tmr python=3.9
+conda activate rs4tmr
+
+# install requierments
+pip install -r requirements.txt
+pip install -r requirements-extra.txt
+pip install stable-baseline3[extra]
+pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu124
+```
+
 # robosuite
 
 ![gallery of_environments](docs/images/gallery.png)
