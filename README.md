@@ -40,6 +40,11 @@ pip install -r requirements-extra.txt
 pip install stable-baseline3[extra]
 pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu124
 ```
+- how to run
+```bibtex
+python my_train.py
+python my_show.py
+```
 
 # robosuite
 
