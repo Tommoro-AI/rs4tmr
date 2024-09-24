@@ -180,7 +180,7 @@ class TmrPickPlace(SingleArmEnv):
         use_camera_obs=True,
         use_object_obs=True,
         reward_scale=1.0,
-        reward_shaping=False,
+        reward_shaping=True, # jesnk
         single_object_mode=0,
         object_type=None,
         has_renderer=False,

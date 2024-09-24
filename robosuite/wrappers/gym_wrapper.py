@@ -31,6 +31,10 @@ class GymWrapper(Wrapper, gym.Env):
     def __init__(self, env, keys=None):
         # Run super method
         super().__init__(env=env)
+        
+        # jesnk added
+        #self.set_obs_spec(env)
+        
         # Create name for gym
         robots = "".join([type(robot.robot_model).__name__ for robot in self.env.robots])
         self.name = robots + "_" + type(self.env).__name__
@@ -49,14 +53,14 @@ class GymWrapper(Wrapper, gym.Env):
             # Iterate over all robots to add to state
             for idx in range(len(self.env.robots)):
                 keys += ["robot{}_proprio-state".format(idx)]
-        self.keys = keys
+        self.origin_keys = keys
 
         # Gym specific attributes
         self.env.spec = None
 
         # set up observation and action spaces
         obs = self.env.reset()
-        self.modality_dims = {key: obs[key].shape for key in self.keys}
+        #self.modality_dims = {key: obs[key].shape for key in self.origin_keys}
         flat_ob = self._flatten_obs(obs)
         self.obs_dim = flat_ob.size
         high = np.inf * np.ones(self.obs_dim)
@@ -77,7 +81,7 @@ class GymWrapper(Wrapper, gym.Env):
             np.array: observations flattened into a 1d array
         """
         ob_lst = []
-        for key in self.keys:
+        for key in self.origin_keys:
             if key in obs_dict:
                 if verbose:
                     print("adding key: {}".format(key))
@@ -132,3 +136,32 @@ class GymWrapper(Wrapper, gym.Env):
         """
         # Dummy args used to mimic Wrapper interface
         return self.env.reward()
+
+
+    # jesnk added
+    
+    def set_obs_spec(self,raw_env):
+        obs = raw_env.reset()
+        self.origin_keys = obs.keys()
+        obs_size = []
+        for key in self.origin_keys:
+            obs_size.append(obs[key].size)
+            print(f"Key: {key}, size: {obs[key].size}")
+    
+        self.dict_obs_size = {}
+        for i, key in enumerate(self.origin_keys):
+            self.dict_obs_size[key] = obs_size[i]
+            
+        # get index of each key in vectorized observation
+        self.key2idx = {}
+        start = 0
+        for key in self.origin_keys:
+            self.key2idx[key] = start
+            start += self.dict_obs_size[key]
+        print(f"Total observation size: {start}")
+        
+    def get_obs_according_to_key(self, obs, key):
+        if len(obs) < 10 :
+            obs = obs[0]
+        idx = self.key2idx[key]
+        return obs[idx:idx+self.dict_obs_size[key]]

@@ -130,6 +130,9 @@ class MujocoEnv(metaclass=EnvMeta):
         self.renderer = renderer
         self.renderer_config = renderer_config
 
+        # jesnk: image-states dict
+        self.image_states = {}
+
         # Load the model
         self._load_model()
 
@@ -272,13 +275,13 @@ class MujocoEnv(metaclass=EnvMeta):
 
         if self.viewer is not None and self.renderer != "mujoco":
             self.viewer.reset()
-
+        #jesnk
         observations = (
             self.viewer._get_observations(force_update=True)
             if self.viewer_get_obs
             else self._get_observations(force_update=True)
         )
-
+        
         # Return new observations
         return observations
 
@@ -340,17 +343,31 @@ class MujocoEnv(metaclass=EnvMeta):
         if force_update:
             self._update_observables(force=True)
 
+        # jesnk : check image-state modality
+        image_state_obs_name = []
+        
         # Loop through all observables and grab their current observation
         for obs_name, observable in self._observables.items():
             if observable.is_enabled() and observable.is_active():
                 obs = observable.obs
                 observations[obs_name] = obs
                 modality = observable.modality + "-state"
+                #print(f"{modality}, obs_name: {obs_name}")
+                # Check the image-state
+                if modality == "image-state":
+                    image_state_obs_name.append(obs_name)
+
                 if modality not in obs_by_modality:
                     obs_by_modality[modality] = []
                 # Make sure all observations are numpy arrays so we can concatenate them
                 array_obs = [obs] if type(obs) in {int, float} or not obs.shape else obs
                 obs_by_modality[modality].append(np.array(array_obs))
+
+        # jesnk: delete image-state obs_name
+        for obs_name in image_state_obs_name:
+            self.image_states[obs_name] = observations[obs_name]
+            del observations[obs_name]
+
 
         # Add in modality observations
         for modality, obs in obs_by_modality.items():
@@ -358,7 +375,6 @@ class MujocoEnv(metaclass=EnvMeta):
             if modality == "image-state" and not macros.CONCATENATE_IMAGES:
                 continue
             observations[modality] = np.concatenate(obs, axis=-1)
-
         return observations
 
     def step(self, action):
@@ -403,6 +419,7 @@ class MujocoEnv(metaclass=EnvMeta):
         if self.viewer is not None and self.renderer != "mujoco":
             self.viewer.update()
 
+        # jesnk
         observations = self.viewer._get_observations() if self.viewer_get_obs else self._get_observations()
         return observations, reward, done, info
 
@@ -471,7 +488,10 @@ class MujocoEnv(metaclass=EnvMeta):
         Returns:
             OrderedDict: Observations from the environment
         """
-        observation = self.viewer._get_observations() if self.viewer_get_obs else self._get_observations()
+        #observation = self.viewer._get_observations() if self.viewer_get_obs else self._get_observations()
+        # jesnk
+        observation = self._get_observations()
+
         return observation
 
     def clear_objects(self, object_names):
