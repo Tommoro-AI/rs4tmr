@@ -200,6 +200,9 @@ class TmrPickPlace(SingleArmEnv):
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
+        wandb_enabled=True,
+        active_rewards = "rglh",
+        fix_object = False,
     ):
         # task settings
         self.single_object_mode = single_object_mode
@@ -232,6 +235,21 @@ class TmrPickPlace(SingleArmEnv):
         
         # jesnk
         self.fixed_poses = {"visualcan":None, "can":None}
+        self.fix_object = fix_object
+        print(f"fix_object:{self.fix_object}")
+        self.wandb_enabled = wandb_enabled
+        
+        self.active_rewards = []
+        if "r" in active_rewards:
+            self.active_rewards.append("r")
+        if "g" in active_rewards:
+            self.active_rewards.append("g")
+        if "l" in active_rewards:
+            self.active_rewards.append("l")
+        if "h" in active_rewards:
+            self.active_rewards.append("h")
+        print("active_rewards:", self.active_rewards)
+        
 
         super().__init__(
             robots=robots,
@@ -291,9 +309,11 @@ class TmrPickPlace(SingleArmEnv):
         sucess = self._check_success() # jesnk
         if sucess:
             print("sucess")
-            wandb.log({"sucess": 1})
+            if self.wandb_enabled:
+                wandb.log({"sucess": 1})
         else:
-            wandb.log({"sucess": 0})
+            if self.wandb_enabled :
+                wandb.log({"sucess": 0})
         
         reward = np.sum(self.objects_in_bins)
 
@@ -301,13 +321,15 @@ class TmrPickPlace(SingleArmEnv):
         if self.reward_shaping:
             staged_rewards = self.staged_rewards()
             reward += max(staged_rewards)
-            wandb.log({"r_reward": staged_rewards[0], "g_reward": staged_rewards[1], "l_reward": staged_rewards[2], "h_reward": staged_rewards[3]})
-            wandb.log({"reward": reward})
+            if self.wandb_enabled:
+                wandb.log({"r_reward": staged_rewards[0], "g_reward": staged_rewards[1], "l_reward": staged_rewards[2], "h_reward": staged_rewards[3]})
+                wandb.log({"reward": reward})
         if self.reward_scale is not None:
             reward *= self.reward_scale
             if self.single_object_mode == 0:
                 reward /= 4.0
-            wandb.log({"reward": reward})
+            if self.wandb_enabled:
+                wandb.log({"reward": reward})
                 
         
         return reward
@@ -352,6 +374,10 @@ class TmrPickPlace(SingleArmEnv):
                 for active_obj in active_objs
             ]
             r_reach = (1 - np.tanh(10.0 * min(dists))) * reach_mult
+        
+        #jesnk
+        if min(dists) < 0.005 :
+            print("min(dists):", min(dists), "r_reach:", r_reach)
 
         # grasping reward for touching any objects of interest
         r_grasp = (
@@ -401,6 +427,16 @@ class TmrPickPlace(SingleArmEnv):
                 hover_mult - lift_mult
             )
             r_hover = np.max(r_hover_all)
+        
+        # jesnk: masking the rewards, only actived rewards are has value, others 0
+        if "r" not in self.active_rewards:
+            r_reach = 0
+        if "g" not in self.active_rewards:
+            r_grasp = 0
+        if "l" not in self.active_rewards:
+            r_lift = 0
+        if "h" not in self.active_rewards:
+            r_hover = 0
 
         return r_reach, r_grasp, r_lift, r_hover
 
@@ -778,14 +814,15 @@ class TmrPickPlace(SingleArmEnv):
             # Loop through all objects and reset their positions
             for obj_pos, obj_quat, obj in object_placements.values():
                 ##jesnk
-                if obj.name.lower() == 'can':
-                    if self.fixed_poses['can'] is not None:
-                        obj_pos = self.fixed_poses['can'][0]
-                        obj_quat = self.fixed_poses['can'][1]
-                    else :
-                        self.fixed_poses['can'] = (obj_pos, obj_quat)
+                if self.fix_object : 
+                    if obj.name.lower() == 'can':
+                        if self.fixed_poses['can'] is not None:
+                            obj_pos = self.fixed_poses['can'][0]
+                            obj_quat = self.fixed_poses['can'][1]
+                        else :
+                            self.fixed_poses['can'] = (obj_pos, obj_quat)
+                        print(f"obj.name:{obj.name}, obj_pos:{obj_pos}, obj_quat:{obj_quat}")
                 ##
-                    print(f"obj.name:{obj.name}, obj_pos:{obj_pos}, obj_quat:{obj_quat}")
 
                 # Set the visual object body locations
                 if "visual" in obj.name.lower():

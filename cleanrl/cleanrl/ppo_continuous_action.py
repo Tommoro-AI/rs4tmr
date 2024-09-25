@@ -15,8 +15,8 @@ from torch.utils.tensorboard import SummaryWriter
 import sys
 import os
 
-project_root_path = "/research/rs4tmr"
-sys.path.append(project_root_path)
+project_root_path = ["/research/rs4tmr", "/research/rs4tmr/cleanrl"]
+sys.path += project_root_path
 
 
 @dataclass
@@ -31,7 +31,7 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL"
+    wandb_project_name: str = "tr_cleanrl"
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
@@ -39,7 +39,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
     tags : str=None
     
-    save_model: bool = False
+    save_model: bool = True
     """whether to save model into the `runs/{run_name}` folder"""
     upload_model: bool = False
     """whether to upload the saved model to huggingface"""
@@ -89,6 +89,12 @@ class Args:
     """the mini-batch size (computed in runtime)"""
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
+    
+    # jesnk
+    active_rewards: str = "rglh"
+    save_interval: int = 50000
+    fix_object: bool = False
+    
 
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
@@ -111,14 +117,14 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
 from my_utils import init_env
 
 
-def jesnk_make_env(env_id, idx, capture_video, run_name, gamma):
+def jesnk_make_env(env_id, idx, capture_video, run_name, gamma, wandb_enabled=True, active_rewards="rglh", fix_object=False,active_image=False):
     def thunk():
         capture_video = False
         if capture_video and idx == 0:
-            env = init_env()
+            env = init_env(wandb_enabled=wandb_enabled, active_rewards=active_rewards, fix_object=fix_object, active_image=active_image)
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
-            env = init_env()
+            env = init_env(wandb_enabled=wandb_enabled, active_rewards=active_rewards, fix_object=fix_object, active_image=active_image)
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
         #env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
@@ -168,13 +174,14 @@ class Agent(nn.Module):
             action = probs.sample()
         return action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x)
 
+import datetime
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"tr__{args.exp_name}__s{args.seed}__{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     if args.track:
         import wandb
 
@@ -186,7 +193,7 @@ if __name__ == "__main__":
             name=run_name,
             monitor_gym=True,
             save_code=True,
-            tags=args.tags.split(","),
+            tags=args.tags.split(",") if args.tags else [],
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
@@ -204,7 +211,7 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [jesnk_make_env(args.env_id, i, args.capture_video, run_name, args.gamma) for i in range(args.num_envs)]
+        [jesnk_make_env(args.env_id, i, args.capture_video, run_name, args.gamma, active_rewards=args.active_rewards) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
@@ -218,6 +225,9 @@ if __name__ == "__main__":
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+
+    # jesnk
+    checksteps = []
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
@@ -352,6 +362,30 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
+        if args.save_model and global_step > args.save_interval and not global_step // args.save_interval in checksteps :
+            print(f"### Saving model on {global_step}###")
+            checksteps.append(global_step // args.save_interval)
+            model_path = f"runs/{run_name}/{args.exp_name}_{global_step}.cleanrl_model"
+            torch.save(agent.state_dict(), model_path)
+            print(f"model saved to {model_path}")
+            from cleanrl_utils.evals.ppo_eval import evaluate
+
+            # episodic_returns = evaluate(
+            #     model_path,
+            #     jesnk_make_env,
+            #     args.env_id,
+            #     eval_episodes=10,
+            #     run_name=f"{run_name}-eval",
+            #     Model=Agent,
+            #     device=device,
+            #     gamma=args.gamma,
+            # )
+            # for idx, episodic_return in enumerate(episodic_returns):
+            #     writer.add_scalar("eval/episodic_return", episodic_return, idx)
+
+        else :
+            print(iteration)
+
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
         torch.save(agent.state_dict(), model_path)
@@ -360,7 +394,7 @@ if __name__ == "__main__":
 
         episodic_returns = evaluate(
             model_path,
-            make_env,
+            jesnk_make_env,
             args.env_id,
             eval_episodes=10,
             run_name=f"{run_name}-eval",

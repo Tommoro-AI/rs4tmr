@@ -66,7 +66,7 @@ class ObservationInspector:
 
 ### jesnk: CleanRL
 
-def init_env (return_raw_env=False, selected_observable_list = []):
+def init_env (return_raw_env=False, selected_observable_list = [], wandb_enabled=True, active_rewards = "rlhg", fix_object = None, active_image=False):
     print(f"Initalized env with init_env")
     rsenv = suite.make(
         "TmrPickPlaceCan",
@@ -79,7 +79,10 @@ def init_env (return_raw_env=False, selected_observable_list = []):
         render_camera='agentview',
         camera_names='agentview',
         camera_depths=True,
+        wandb_enabled=wandb_enabled,
+        active_rewards=active_rewards,
         #single_object_mode= 1, # inline parameter
+        fix_object = fix_object
     )
 
     full_observable_list = [
@@ -94,6 +97,7 @@ def init_env (return_raw_env=False, selected_observable_list = []):
         'robot0_gripper_qpos', 
         'robot0_gripper_qvel', 
         'agentview_image', 
+        'agentview_depth',
         'world_pose_in_gripper', 
         'Milk_pos', 
         'Milk_quat', 
@@ -113,6 +117,7 @@ def init_env (return_raw_env=False, selected_observable_list = []):
         'Can_to_robot0_eef_quat',
     ]
     for observable in full_observable_list:
+        #print(observable)
         rsenv.modify_observable(observable, 'enabled', False)
         rsenv.modify_observable(observable, 'active', False)
     
@@ -128,7 +133,12 @@ def init_env (return_raw_env=False, selected_observable_list = []):
             'robot0_gripper_qvel', 
             'Can_to_robot0_eef_pos', 
             'Can_to_robot0_eef_quat',
+            #'agentview_image', 
+            #'agentview_depth'
         ]
+        if active_image:
+            selected_observable_list.append('agentview_image')
+            selected_observable_list.append('agentview_depth')
     # print(f"Selected observables: {selected_observable_list}")
         
     for observable in selected_observable_list:
