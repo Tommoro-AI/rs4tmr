@@ -36,6 +36,8 @@ class Args:
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
+    tags: str = None
+    
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
@@ -177,6 +179,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             name=run_name,
             monitor_gym=True,
             save_code=True,
+            tags=args.tags.split(","),
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(

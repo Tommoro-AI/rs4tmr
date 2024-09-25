@@ -19,7 +19,7 @@ from robosuite.models.objects import (
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.placement_samplers import SequentialCompositeSampler, UniformRandomSampler
-
+import wandb
 
 class TmrPickPlace(SingleArmEnv):
     """
@@ -181,7 +181,7 @@ class TmrPickPlace(SingleArmEnv):
         use_object_obs=True,
         reward_scale=1.0,
         reward_shaping=True, # jesnk
-        single_object_mode=0,
+        single_object_mode=1, # jesnk
         object_type=None,
         has_renderer=False,
         has_offscreen_renderer=True,
@@ -229,6 +229,9 @@ class TmrPickPlace(SingleArmEnv):
 
         # whether to use ground-truth object states
         self.use_object_obs = use_object_obs
+        
+        # jesnk
+        self.fixed_poses = {"visualcan":None, "can":None}
 
         super().__init__(
             robots=robots,
@@ -285,17 +288,28 @@ class TmrPickPlace(SingleArmEnv):
             float: reward value
         """
         # compute sparse rewards
-        self._check_success()
+        sucess = self._check_success() # jesnk
+        if sucess:
+            print("sucess")
+            wandb.log({"sucess": 1})
+        else:
+            wandb.log({"sucess": 0})
+        
         reward = np.sum(self.objects_in_bins)
 
         # add in shaped rewards
         if self.reward_shaping:
             staged_rewards = self.staged_rewards()
             reward += max(staged_rewards)
+            wandb.log({"r_reward": staged_rewards[0], "g_reward": staged_rewards[1], "l_reward": staged_rewards[2], "h_reward": staged_rewards[3]})
+            wandb.log({"reward": reward})
         if self.reward_scale is not None:
             reward *= self.reward_scale
             if self.single_object_mode == 0:
                 reward /= 4.0
+            wandb.log({"reward": reward})
+                
+        
         return reward
 
     def staged_rewards(self):
@@ -411,7 +425,74 @@ class TmrPickPlace(SingleArmEnv):
             res = False
         return res
 
+
     def _get_placement_initializer(self):
+        """
+        Helper function for defining placement initializer and object sampling bounds.
+        """
+        self.placement_initializer = SequentialCompositeSampler(name="ObjectSampler")
+
+        # can sample anywhere in bin
+        bin_x_half = self.model.mujoco_arena.table_full_size[0] / 2 - 0.05
+        bin_y_half = self.model.mujoco_arena.table_full_size[1] / 2 - 0.05
+
+        # each object should just be sampled in the bounds of the bin (with some tolerance)
+        self.placement_initializer.append_sampler(
+            sampler=UniformRandomSampler(
+                name="CollisionObjectSampler",
+                mujoco_objects=self.objects,
+                x_range=[-bin_x_half, bin_x_half],
+                y_range=[-bin_y_half, bin_y_half],
+                rotation=self.z_rotation,
+                rotation_axis="z",
+                ensure_object_boundary_in_range=True,
+                ensure_valid_placement=True,
+                reference_pos=self.bin1_pos,
+                z_offset=self.z_offset,
+            )
+        )
+
+        # each visual object should just be at the center of each target bin
+        index = 0
+        for vis_obj in self.visual_objects:
+            # get center of target bin
+            bin_x_low = self.bin2_pos[0]
+            bin_y_low = self.bin2_pos[1]
+            if index == 0 or index == 2:
+                bin_x_low -= self.bin_size[0] / 2
+            if index < 2:
+                bin_y_low -= self.bin_size[1] / 2
+            bin_x_high = bin_x_low + self.bin_size[0] / 2
+            bin_y_high = bin_y_low + self.bin_size[1] / 2
+            bin_center = np.array(
+                [
+                    (bin_x_low + bin_x_high) / 2.0,
+                    (bin_y_low + bin_y_high) / 2.0,
+                ]
+            )
+
+            # placement is relative to object bin, so compute difference and send to placement initializer
+            rel_center = bin_center - self.bin1_pos[:2]
+
+            self.placement_initializer.append_sampler(
+                sampler=UniformRandomSampler(
+                    name=f"{vis_obj.name}ObjectSampler",
+                    mujoco_objects=vis_obj,
+                    x_range=[rel_center[0], rel_center[0]],
+                    y_range=[rel_center[1], rel_center[1]],
+                    rotation=0.0,
+                    rotation_axis="z",
+                    ensure_object_boundary_in_range=False,
+                    ensure_valid_placement=False,
+                    reference_pos=self.bin1_pos,
+                    z_offset=self.bin2_pos[2] - self.bin1_pos[2],
+                )
+            )
+            index += 1
+
+
+
+    def _get_placement_initializer_origin(self):
         """
         Helper function for defining placement initializer and object sampling bounds.
         """
@@ -694,9 +775,18 @@ class TmrPickPlace(SingleArmEnv):
 
             # Sample from the placement initializer for all objects
             object_placements = self.placement_initializer.sample()
-
             # Loop through all objects and reset their positions
             for obj_pos, obj_quat, obj in object_placements.values():
+                ##jesnk
+                if obj.name.lower() == 'can':
+                    if self.fixed_poses['can'] is not None:
+                        obj_pos = self.fixed_poses['can'][0]
+                        obj_quat = self.fixed_poses['can'][1]
+                    else :
+                        self.fixed_poses['can'] = (obj_pos, obj_quat)
+                ##
+                    print(f"obj.name:{obj.name}, obj_pos:{obj_pos}, obj_quat:{obj_quat}")
+
                 # Set the visual object body locations
                 if "visual" in obj.name.lower():
                     self.sim.model.body_pos[self.obj_body_id[obj.name]] = obj_pos

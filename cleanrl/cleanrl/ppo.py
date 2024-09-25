@@ -13,6 +13,11 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
+import sys
+import os
+
+project_root_path = "/research/rs4tmr"
+sys.path.append(project_root_path)
 
 @dataclass
 class Args:
@@ -32,6 +37,8 @@ class Args:
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
+    tags: str = None
+
 
     # Algorithm specific arguments
     env_id: str = "CartPole-v1"
@@ -90,6 +97,17 @@ def make_env(env_id, idx, capture_video, run_name):
 
     return thunk
 
+from my_utils import init_env
+
+def jesnk_make_env(env_id, seed, idx, capture_video, run_name):
+    def thunk():
+        #env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        env = init_env()
+        #env = gym.wrappers.RecordEpisodeStatistics(env)
+        env.action_space.seed(seed)
+        return env
+
+    return thunk
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
@@ -143,6 +161,7 @@ if __name__ == "__main__":
             name=run_name,
             monitor_gym=True,
             save_code=True,
+            tags=args.tags.split(","),
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
@@ -160,7 +179,7 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_envs)],
+        [jesnk_make_env(env_id=args.env_id, seed=0, idx=i, capture_video=args.capture_video, run_name=run_name) for i in range(args.num_envs)],
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 

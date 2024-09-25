@@ -12,6 +12,11 @@ import torch.optim as optim
 import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
+import sys
+import os
+
+project_root_path = "/research/rs4tmr"
+sys.path.append(project_root_path)
 
 
 @dataclass
@@ -32,6 +37,8 @@ class Args:
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
+    tags : str=None
+    
     save_model: bool = False
     """whether to save model into the `runs/{run_name}` folder"""
     upload_model: bool = False
@@ -101,6 +108,27 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         return env
 
     return thunk
+from my_utils import init_env
+
+
+def jesnk_make_env(env_id, idx, capture_video, run_name, gamma):
+    def thunk():
+        capture_video = False
+        if capture_video and idx == 0:
+            env = init_env()
+            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        else:
+            env = init_env()
+        env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
+        #env = gym.wrappers.RecordEpisodeStatistics(env)
+        env = gym.wrappers.ClipAction(env)
+        env = gym.wrappers.NormalizeObservation(env)
+        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+        env = gym.wrappers.NormalizeReward(env, gamma=gamma)
+        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
+        return env
+
+    return thunk
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -158,6 +186,7 @@ if __name__ == "__main__":
             name=run_name,
             monitor_gym=True,
             save_code=True,
+            tags=args.tags.split(","),
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
@@ -175,7 +204,7 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, i, args.capture_video, run_name, args.gamma) for i in range(args.num_envs)]
+        [jesnk_make_env(args.env_id, i, args.capture_video, run_name, args.gamma) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 

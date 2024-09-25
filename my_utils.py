@@ -64,8 +64,10 @@ class ObservationInspector:
 
 
 
+### jesnk: CleanRL
 
 def init_env (return_raw_env=False, selected_observable_list = []):
+    print(f"Initalized env with init_env")
     rsenv = suite.make(
         "TmrPickPlaceCan",
         robots="UR5e",  # use UR5e robot
@@ -77,6 +79,7 @@ def init_env (return_raw_env=False, selected_observable_list = []):
         render_camera='agentview',
         camera_names='agentview',
         camera_depths=True,
+        #single_object_mode= 1, # inline parameter
     )
 
     full_observable_list = [
@@ -115,34 +118,34 @@ def init_env (return_raw_env=False, selected_observable_list = []):
     
     if selected_observable_list == []:
         selected_observable_list = [
-            # 'robot0_joint_pos',
-            # 'robot0_joint_vel',
-            # 'robot0_eef_pos',
-            # 'robot0_eef_quat',
-            # 'robot0_gripper_qpos',
-            'Can_to_robot0_eef_pos', 
-            'Can_to_robot0_eef_quat',
-            'robot0_gripper_qpos',
-            'robot0_gripper_qvel', 
+            'robot0_joint_pos',
+            'robot0_joint_vel',
             'robot0_eef_pos', 
             'robot0_eef_quat', 
+            'robot0_eef_vel_lin', 
+            'robot0_eef_vel_ang', 
+            'robot0_gripper_qpos',
+            'robot0_gripper_qvel', 
+            'Can_to_robot0_eef_pos', 
+            'Can_to_robot0_eef_quat',
         ]
+    # print(f"Selected observables: {selected_observable_list}")
         
     for observable in selected_observable_list:
         rsenv.modify_observable(observable, 'enabled', True)
         rsenv.modify_observable(observable, 'active', True)
         
 
-    print('Robosuite environment maked:',type(rsenv) , rsenv, dir(rsenv))
-    print(len(rsenv._observables.keys()))
+    # print('Robosuite environment maked:',type(rsenv) , rsenv, dir(rsenv))
+    # print(len(rsenv._observables.keys()))
     #print(f"Observable keys: {rsenv._observables.keys()}")
     tmp_obs = rsenv.reset()
     keys = tmp_obs.keys()
-    print("### Observation keys ###")
-    for key in keys:
-        print(f"Key: {key}, size: {tmp_obs[key].size}")
-    print(f"Total observation size: {sum([tmp_obs[key].size for key in keys])}")
-    print("########################")
+    # print("### Observation keys ###")
+    # for key in keys:
+    #     print(f"Key: {key}, size: {tmp_obs[key].size}")
+    # print(f"Total observation size: {sum([tmp_obs[key].size for key in keys])}")
+    # print("########################")
 
     if return_raw_env:
         return rsenv
@@ -305,6 +308,7 @@ def make_env(env_id: str, rank: int, render: bool=True, seed: int = 0):
             has_renderer=True,  # make sure we can render to the screen
             reward_shaping=True,  # use dense rewards
             control_freq=20,  # control should happen fast enough so that simulation looks smooth
+            single_object_mode= 1,
         )
 
         # full_observable_list = [
