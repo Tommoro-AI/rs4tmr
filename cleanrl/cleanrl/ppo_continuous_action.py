@@ -47,7 +47,7 @@ class Args:
     """the user or org name of the model repository from the Hugging Face Hub"""
 
     # Algorithm specific arguments
-    env_id: str = "HalfCheetah-v4"
+    task_id: str = "HalfCheetah-v4"
     """the id of the environment"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
@@ -94,6 +94,9 @@ class Args:
     active_rewards: str = "rglh"
     save_interval: int = 50000
     fix_object: bool = False
+    task_id: str = "pickplace"
+    reward_shaping: bool = False
+    control_mode: str = "default"
     
 
 
@@ -116,25 +119,6 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
     return thunk
 from my_utils import init_env
 
-
-def jesnk_make_env(env_id, idx, capture_video, run_name, gamma, wandb_enabled=True, active_rewards="rglh", fix_object=False,active_image=False):
-    def thunk():
-        capture_video = False
-        if capture_video and idx == 0:
-            env = init_env(wandb_enabled=wandb_enabled, active_rewards=active_rewards, fix_object=fix_object, active_image=active_image)
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        else:
-            env = init_env(wandb_enabled=wandb_enabled, active_rewards=active_rewards, fix_object=fix_object, active_image=active_image)
-        env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
-        #env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = gym.wrappers.ClipAction(env)
-        env = gym.wrappers.NormalizeObservation(env)
-        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
-        env = gym.wrappers.NormalizeReward(env, gamma=gamma)
-        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
-        return env
-
-    return thunk
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -176,15 +160,56 @@ class Agent(nn.Module):
 
 import datetime
 
+
+
+def ppo_make_env(task_id, reward_shaping,idx, capture_video, run_name, gamma, control_mode='osc',wandb_enabled=True, active_rewards="rglh", fix_object=False,active_image=False, verbose=True):
+    def thunk():
+        capture_video = False
+        if capture_video and idx == 0:
+            env = init_env(
+                task_id=task_id,
+                wandb_enabled=wandb_enabled, 
+                reward_shaping=reward_shaping,
+                control_mode=control_mode,
+                active_rewards=active_rewards, 
+                fix_object=fix_object, 
+                active_image=active_image,
+                verbose=verbose
+               )
+            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        else:
+            env = init_env(
+                task_id=task_id,
+                wandb_enabled=wandb_enabled,
+                reward_shaping=reward_shaping, 
+                control_mode=control_mode,
+                active_rewards=active_rewards, 
+                fix_object=fix_object, 
+                active_image=active_image,
+                verbose=verbose
+                )
+            
+            
+        env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
+        #env = gym.wrappers.RecordEpisodeStatistics(env)
+        env = gym.wrappers.ClipAction(env)
+        env = gym.wrappers.NormalizeObservation(env)
+        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+        env = gym.wrappers.NormalizeReward(env, gamma=gamma)
+        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
+        return env
+    return thunk
+
+from my_utils import get_current_time
+import wandb
+
 if __name__ == "__main__":
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"tr__{args.exp_name}__s{args.seed}__{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    run_name = f"{args.task_id}_{args.tags}_s{args.seed}__{get_current_time()}"
     if args.track:
-        import wandb
-
         wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
@@ -211,7 +236,17 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [jesnk_make_env(args.env_id, i, args.capture_video, run_name, args.gamma, active_rewards=args.active_rewards, fix_object=args.fix_object) for i in range(args.num_envs)]
+        [ppo_make_env(
+            task_id=args.task_id, 
+            reward_shaping=args.reward_shaping,
+            idx=i, 
+            capture_video=args.capture_video, 
+            control_mode=args.control_mode,
+            run_name=run_name, 
+            gamma= args.gamma, 
+            active_rewards=args.active_rewards, 
+            fix_object=args.fix_object
+            ) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
@@ -394,8 +429,8 @@ if __name__ == "__main__":
 
         episodic_returns = evaluate(
             model_path,
-            jesnk_make_env,
-            args.env_id,
+            ppo_make_env,
+            args.task_id,
             eval_episodes=10,
             run_name=f"{run_name}-eval",
             Model=Agent,
@@ -408,7 +443,7 @@ if __name__ == "__main__":
         if args.upload_model:
             from cleanrl_utils.huggingface import push_to_hub
 
-            repo_name = f"{args.env_id}-{args.exp_name}-seed{args.seed}"
+            repo_name = f"{args.task_id}-{args.exp_name}-seed{args.seed}"
             repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
             push_to_hub(args, episodic_returns, repo_id, "PPO", f"runs/{run_name}", f"videos/{run_name}-eval")
 

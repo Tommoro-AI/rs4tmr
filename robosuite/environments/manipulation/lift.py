@@ -240,16 +240,17 @@ class Lift(SingleArmEnv):
         reward = 0.0
 
         # sparse completion reward
-        if self._check_success():
-            reward = 2.25
-            wandb.log({"success": 1})
+        success = self._check_success()
+        if success :
+            if self.wandb_enabled:
+                wandb.log({"success": 1})
         else :
-            wandb.log({"success": 0})
-            
-
+            if self.wandb_enabled:
+                wandb.log({"success": 0})
+        if success:
+            reward = 2.25            
         # use a shaping reward
         elif self.reward_shaping:
-
             # reaching reward
             cube_pos = self.sim.data.body_xpos[self.cube_body_id]
             gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
@@ -260,6 +261,7 @@ class Lift(SingleArmEnv):
             # grasping reward
             if self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cube):
                 reward += 0.25
+
 
         # Scale reward if requested
         if self.reward_scale is not None:
