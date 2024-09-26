@@ -65,11 +65,14 @@ class ObservationInspector:
 
 
 ### jesnk: CleanRL
+from robosuite.controllers import load_controller_config
 
 def init_env (return_raw_env=False, selected_observable_list = [], wandb_enabled=True, active_rewards = "rlhg", fix_object = None, active_image=False):
     print(f"Initalized env with init_env")
+    controller_config = load_controller_config(default_controller='OSC_POSE')
+
     rsenv = suite.make(
-        "TmrPickPlaceCan",
+        "Lift",#"TmrPickPlaceCan",
         robots="UR5e",  # use UR5e robot
         use_camera_obs=True,  # use pixel observations
         has_offscreen_renderer=True,  # needed if using pixel obs
@@ -80,9 +83,10 @@ def init_env (return_raw_env=False, selected_observable_list = [], wandb_enabled
         camera_names='agentview',
         camera_depths=True,
         wandb_enabled=wandb_enabled,
-        active_rewards=active_rewards,
+        #active_rewards=active_rewards,
         #single_object_mode= 1, # inline parameter
-        fix_object = fix_object
+        #fix_object = fix_object,
+        controller_configs=controller_config,
     )
 
     full_observable_list = [
@@ -116,25 +120,56 @@ def init_env (return_raw_env=False, selected_observable_list = [], wandb_enabled
         'Can_to_robot0_eef_pos', 
         'Can_to_robot0_eef_quat',
     ]
+    
+    full_observable_list = [
+        'robot0_joint_pos', 
+        'agentview_depth', 
+        'cube_pos', 
+        'robot0_eef_vel_lin', 
+        'robot0_eef_vel_ang', 
+        'robot0_eef_quat', 
+        'robot0_eef_pos', 
+        
+        'cube_quat', 
+        'robot0_gripper_qpos', 
+        'robot0_gripper_qvel', 
+
+        'robot0_joint_pos_cos', 
+        'robot0_joint_vel', 
+        'gripper_to_cube_pos', 
+        'robot0_joint_pos_sin', 
+        'agentview_image'
+        ]
+
+    
     for observable in full_observable_list:
         #print(observable)
         rsenv.modify_observable(observable, 'enabled', False)
         rsenv.modify_observable(observable, 'active', False)
+    '''
+    {'robot0_joint_pos', 'agentview_depth', 'cube_pos', 'robot0_eef_vel_lin', 'robot0_eef_vel_ang', 'robot0_eef_quat', 'cube_quat', 'robot0_gripper_qpos', 'robot0_joint_pos_cos', 'robot0_joint_vel', 'gripper_to_cube_pos', 'robot0_joint_pos_sin', 'robot0_gripper_qvel', 'robot0_eef_pos', 'agentview_image'}
+
+    
+    '''
+    
+    
     
     if selected_observable_list == []:
         selected_observable_list = [
-            'robot0_joint_pos',
-            'robot0_joint_vel',
+            #'robot0_joint_pos',
+            #'robot0_joint_vel',
             'robot0_eef_pos', 
             'robot0_eef_quat', 
             'robot0_eef_vel_lin', 
             'robot0_eef_vel_ang', 
             'robot0_gripper_qpos',
             'robot0_gripper_qvel', 
-            'Can_to_robot0_eef_pos', 
-            'Can_to_robot0_eef_quat',
+            #'Can_to_robot0_eef_pos', 
+            #'Can_to_robot0_eef_quat',
             #'agentview_image', 
             #'agentview_depth'
+            # Cube
+            'gripper_to_cube_pos',             
         ]
         if active_image:
             selected_observable_list.append('agentview_image')
@@ -151,11 +186,11 @@ def init_env (return_raw_env=False, selected_observable_list = [], wandb_enabled
     #print(f"Observable keys: {rsenv._observables.keys()}")
     tmp_obs = rsenv.reset()
     keys = tmp_obs.keys()
-    # print("### Observation keys ###")
-    # for key in keys:
-    #     print(f"Key: {key}, size: {tmp_obs[key].size}")
-    # print(f"Total observation size: {sum([tmp_obs[key].size for key in keys])}")
-    # print("########################")
+    print("### Observation keys ###")
+    for key in keys:
+        print(f"Key: {key}, size: {tmp_obs[key].size}")
+    print(f"Total observation size: {sum([tmp_obs[key].size for key in keys])}")
+    print("########################")
 
     if return_raw_env:
         return rsenv

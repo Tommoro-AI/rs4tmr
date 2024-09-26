@@ -11,6 +11,7 @@ from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils.transform_utils import convert_quat
 
+import wandb
 
 class Lift(SingleArmEnv):
     """
@@ -164,6 +165,7 @@ class Lift(SingleArmEnv):
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
+        wandb_enabled=False,
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -179,6 +181,9 @@ class Lift(SingleArmEnv):
 
         # object placement initializer
         self.placement_initializer = placement_initializer
+
+        # jesnk
+        self.wandb_enabled = wandb_enabled
 
         super().__init__(
             robots=robots,
@@ -237,6 +242,10 @@ class Lift(SingleArmEnv):
         # sparse completion reward
         if self._check_success():
             reward = 2.25
+            wandb.log({"success": 1})
+        else :
+            wandb.log({"success": 0})
+            
 
         # use a shaping reward
         elif self.reward_shaping:
