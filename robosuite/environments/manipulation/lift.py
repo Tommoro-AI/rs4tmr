@@ -241,6 +241,8 @@ class Lift(SingleArmEnv):
 
         # sparse completion reward
         success = self._check_success()
+        if success:
+            print("Success")
         if success :
             if self.wandb_enabled:
                 wandb.log({"success": 1})
@@ -437,3 +439,14 @@ class Lift(SingleArmEnv):
 
         # cube is higher than the table top above a margin
         return cube_height > table_height + 0.04
+
+    def check_success(self):
+        """
+        Check if cube has been lifted.
+
+        Returns:
+            bool: True if cube has been lifted
+        """
+        cube_height = self.sim.data.body_xpos[self.cube_body_id][2]
+        table_height = self.model.mujoco_arena.table_offset[2]
+        return cube_height -  table_height

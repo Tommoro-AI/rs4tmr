@@ -52,7 +52,7 @@ class Args:
     """the discount factor gamma"""
     tau: float = 0.005
     """target smoothing coefficient (default: 0.005)"""
-    batch_size: int = 256
+    batch_size: int = 256*10
     """the batch size of sample from the reply memory"""
     learning_starts: int = 5e3
     """timestep to start learning"""
@@ -68,7 +68,19 @@ class Args:
     """Entropy regularization coefficient."""
     autotune: bool = True
     """automatic tuning of the entropy coefficient"""
+    
+    # jesnk
+    active_rewards: str = "rglh"
+    save_interval: int = 50000
+    fix_object: bool = False
+    task_id: str = "pickplace"
+    reward_shaping: bool = False
+    control_mode: str = "default"
+    save_model: bool = True
 
+ 
+
+from cleanrl.cleanrl.ppo_continuous_action import NormalizeObservationCustom, NormalizeRewardCustom
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
@@ -86,12 +98,20 @@ def make_env(env_id, seed, idx, capture_video, run_name):
 
 from my_utils import init_env
 
-def jesnk_make_env(env_id, seed, idx, capture_video, run_name):
+def sac_make_env(task_id, reward_shaping,capture_video, run_name, control_mode='osc',wandb_enabled=True, active_rewards="rglh", fix_object=False,active_image=False, verbose=True):
     def thunk():
         #env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        env = init_env()
-        #env = gym.wrappers.RecordEpisodeStatistics(env)
-        env.action_space.seed(seed)
+        env = init_env(
+            task_id=task_id,
+            wandb_enabled=wandb_enabled,
+            reward_shaping=reward_shaping, 
+            control_mode=control_mode,
+            active_rewards=active_rewards, 
+            fix_object=fix_object, 
+            active_image=active_image,
+            verbose=verbose
+            )        #env = gym.wrappers.RecordEpisodeStatistics(env)
+        env.action_space.seed()
         return env
 
     return thunk
@@ -155,6 +175,7 @@ class Actor(nn.Module):
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
 
+from my_utils import get_current_time
 
 if __name__ == "__main__":
     import stable_baselines3 as sb3
@@ -167,7 +188,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         )
 
     args = tyro.cli(Args)
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.task_id}_sac_{args.tags}_s{args.seed}__{get_current_time()}"
     if args.track:
         import wandb
 
@@ -179,7 +200,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             name=run_name,
             monitor_gym=True,
             save_code=True,
-            tags=args.tags.split(","),
+            tags=args.tags.split(",") if args.tags else [],
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
@@ -198,7 +219,15 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     # env setup
     #envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
-    envs = gym.vector.SyncVectorEnv([jesnk_make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
+    envs = gym.vector.SyncVectorEnv([sac_make_env(
+            task_id=args.task_id, 
+            reward_shaping=args.reward_shaping,
+            capture_video=args.capture_video, 
+            control_mode=args.control_mode,
+            run_name=run_name, 
+            active_rewards=args.active_rewards, 
+            fix_object=args.fix_object
+        )])
 
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
@@ -328,6 +357,25 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
+            
+            # save model
+            if args.save_model and global_step % args.save_interval == 0:
+                torch.save(actor.state_dict(), f"runs/{run_name}/{args.exp_name}_{global_step}_actor.pth")
+                torch.save(qf1.state_dict(), f"runs/{run_name}/{args.exp_name}_{global_step}_qf1.pth")
+                torch.save(qf2.state_dict(), f"runs/{run_name}/{args.exp_name}_{global_step}_qf2.pth")
+                torch.save(qf1_target.state_dict(), f"runs/{run_name}/{args.exp_name}_{global_step}_qf1_target.pth")
+                torch.save(qf2_target.state_dict(), f"runs/{run_name}/{args.exp_name}_{global_step}_qf2_target.pth")
+                torch.save(q_optimizer.state_dict(), f"runs/{run_name}/{args.exp_name}_{global_step}_q_optimizer.pth")
+                torch.save(actor_optimizer.state_dict(), f"runs/{run_name}/{args.exp_name}_{global_step}_actor_optimizer.pth")
+                torch.save(a_optimizer.state_dict(), f"runs/{run_name}/{args.exp_name}_{global_step}_a_optimizer.pth")
+                torch.save(log_alpha, f"runs/{run_name}/{args.exp_name}_{global_step}_log_alpha.pth")
+                # save buffer
+                #rb.save(f"runs/{run_name}/{args.exp_name}_{global_step}_rb.pth")
+                
+                
+                print("Model saved")
+                
+                
 
     envs.close()
     writer.close()

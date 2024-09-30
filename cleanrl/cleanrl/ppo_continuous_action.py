@@ -246,7 +246,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.task_id}_{args.tags}_s{args.seed}__{get_current_time()}"
+    run_name = f"{args.task_id}_ppo_{args.tags}_s{args.seed}__{get_current_time()}"
     if args.track:
         wandb.init(
             project=args.wandb_project_name,
