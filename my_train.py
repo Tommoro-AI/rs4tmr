@@ -11,12 +11,9 @@ from stable_baselines3.common.callbacks import EvalCallback
 from my_utils import make_env, init_env, init_env_2
 import wandb
 
-
-
 run = wandb.init(
     project="tr_test",
 )
-
 
 if __name__ == '__main__':
     env_id = 'TmrPickPlaceCan'

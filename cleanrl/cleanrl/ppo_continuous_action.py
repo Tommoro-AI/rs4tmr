@@ -99,6 +99,44 @@ class Args:
     control_mode: str = "default"
     
 
+import gymnasium as gym
+import numpy as np
+
+class NormalizeObservationCustom(gym.wrappers.NormalizeObservation):
+    def save_obs_running_average(self, path):
+        np.savez(
+            path,
+            mean=self.obs_rms.mean,
+            var=self.obs_rms.var,
+            count=self.obs_rms.count
+        )
+    
+    def load_obs_running_average(self, path):
+        data = np.load(path)
+        self.obs_rms.mean = data['mean']
+        self.obs_rms.var = data['var']
+        self.obs_rms.count = data['count']
+
+class NormalizeRewardCustom(gym.wrappers.NormalizeReward):
+    def save_reward_running_average(self, path):
+        np.savez(
+            path,
+            mean=self.return_rms.mean,
+            var=self.return_rms.var,
+            count=self.return_rms.count
+        )
+    
+    def load_reward_running_average(self, path):
+        data = np.load(path)
+        self.return_rms.mean = data['mean']
+        self.return_rms.var = data['var']
+        self.return_rms.count = data['count']
+
+
+
+
+
+
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
@@ -193,9 +231,9 @@ def ppo_make_env(task_id, reward_shaping,idx, capture_video, run_name, gamma, co
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
         #env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
-        env = gym.wrappers.NormalizeObservation(env)
+        env = NormalizeObservationCustom(env)  # 커스텀 래퍼 사용
         env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
-        env = gym.wrappers.NormalizeReward(env, gamma=gamma)
+        env = NormalizeRewardCustom(env, gamma=gamma)  # 커스텀 래퍼 사용
         env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
     return thunk
@@ -403,6 +441,22 @@ if __name__ == "__main__":
             model_path = f"runs/{run_name}/{args.exp_name}_{global_step}.cleanrl_model"
             torch.save(agent.state_dict(), model_path)
             print(f"model saved to {model_path}")
+            # 래퍼 스택에서 각 래퍼에 접근하여 상태 저장
+            
+            env_instance = envs.envs[0]
+            # NormalizeObservationCustom 래퍼에 접근
+            normalize_obs_wrapper = env_instance
+            while not isinstance(normalize_obs_wrapper, NormalizeObservationCustom):
+                normalize_obs_wrapper = normalize_obs_wrapper.env
+            
+            # NormalizeRewardCustom 래퍼에 접근
+            normalize_reward_wrapper = env_instance
+            while not isinstance(normalize_reward_wrapper, NormalizeRewardCustom):
+                normalize_reward_wrapper = normalize_reward_wrapper.env
+            
+            # 상태 저장
+            normalize_obs_wrapper.save_obs_running_average(f"runs/{run_name}/{args.exp_name}_{global_step}_obs_rms.npz")
+            normalize_reward_wrapper.save_reward_running_average(f"runs/{run_name}/{args.exp_name}_{global_step}_reward_rms.npz")
             from cleanrl_utils.evals.ppo_eval import evaluate
 
             # episodic_returns = evaluate(

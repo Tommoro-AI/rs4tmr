@@ -52,8 +52,6 @@ def init_env (
     else :
         AssertionError(f"Invalid task_id: {task_id}")
     
-    
-    
     print(f"Initalized env with init_env")
     print(env_id)
     if control_mode == 'default':
@@ -239,15 +237,12 @@ def init_env (
         print(f"wandb_enabled: {wandb_enabled}")
         print("########################")
 
-        
-
     if return_raw_env:
         return rsenv
 
     wrapped_env = GymWrapper(
         rsenv,
     )
-
     wrapped_env.reset()
     monitor_env = Monitor(wrapped_env)
     #set_random_seed(seed)
