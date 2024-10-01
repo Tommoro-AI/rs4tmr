@@ -181,7 +181,8 @@ def ppo_make_env(task_id, reward_shaping,idx, control_freq, capture_video, run_n
         return env
     return thunk
 
-def load_ppo_checkpoint(checkpoint_path, path_prefix="/research/rs4tmr/cleanrl/cleanrl/",task_id='lift', seed=1, gamma=0.99, control_freq=20, active_image=False, verbose=False):
+def load_ppo_checkpoint(checkpoint_path=None,
+                        task_id='lift', seed=1, gamma=0.99, control_freq=20, active_image=False, verbose=False):
     args = Args()
     args.fix_object = False
     control_mode = "osc_position"
@@ -214,7 +215,7 @@ def load_ppo_checkpoint(checkpoint_path, path_prefix="/research/rs4tmr/cleanrl/c
     else :
         assert device == torch.device("cpu")
 
-
+    path_prefix="/research/rs4tmr/cleanrl/cleanrl/"
     weight_path = path_prefix + checkpoint_path + ".cleanrl_model"
     # Agent 초기화 및 모델 불러오기
     agent = Agent(env).to(device)
@@ -235,8 +236,8 @@ def load_ppo_checkpoint(checkpoint_path, path_prefix="/research/rs4tmr/cleanrl/c
         normalize_reward_wrapper = normalize_reward_wrapper.env
 
     # 상태 로드
-    normalize_obs_wrapper.load_obs_running_average(checkpoint_path + "_obs_rms.npz")
-    normalize_reward_wrapper.load_reward_running_average(checkpoint_path + "_reward_rms.npz")
+    normalize_obs_wrapper.load_obs_running_average(path_prefix + checkpoint_path + "_obs_rms.npz")
+    normalize_reward_wrapper.load_reward_running_average(path_prefix + checkpoint_path + "_reward_rms.npz")
 
     return env, agent
     
@@ -299,7 +300,7 @@ def load_model_and_evaluate(model_path, global_step=None,task_id=None, num_episo
     env.close()
     
     if wandb_log:
-        wandb.log({"success_rateLM": count_sucess/num_episodes}, step=global_step)    
+        wandb.log({"success_rateLM": count_sucess/num_episodes})    
     print(f"LM:Success Rate on {global_step}: {count_sucess/num_episodes}  {count_sucess}/{num_episodes}")
 
 def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, global_step=None):
@@ -332,7 +333,7 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
         total_rewards.append(episode_reward)
         
     if wandb_log:
-        wandb.log({"success_rateEO": count_sucess/num_episodes}, step=global_step)    
+        wandb.log({"success_rateEO": count_sucess/num_episodes})    
     print(f"EO:Success Rate on {global_step}: {count_sucess/num_episodes}  {count_sucess}/{num_episodes}")
 
 
