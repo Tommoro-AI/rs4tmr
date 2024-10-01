@@ -106,6 +106,7 @@ class Args:
     control_mode: str = "default"
     control_freq: int = 20
     num_eval_episodes: int = 10
+    ignore_done: bool = False
     
 
 
@@ -142,7 +143,12 @@ class NormalizeRewardCustom(gym.wrappers.NormalizeReward):
         self.return_rms.count = data['count']
 
 
-def ppo_make_env(task_id, reward_shaping,idx, control_freq, capture_video, run_name, gamma, control_mode='osc',wandb_enabled=True, active_rewards="rglh", fix_object=False,active_image=False, verbose=True):
+def ppo_make_env(task_id, reward_shaping,idx, control_freq, 
+                 capture_video, run_name, gamma, control_mode='osc',wandb_enabled=True, 
+                 active_rewards="rglh", fix_object=False,active_image=False, verbose=True,
+                 ignore_done=False,
+                 
+                 ):
     def thunk():
         capture_video = False
         if capture_video and idx == 0:
@@ -156,6 +162,7 @@ def ppo_make_env(task_id, reward_shaping,idx, control_freq, capture_video, run_n
                 active_image=active_image,
                 verbose=verbose,
                 control_freq=control_freq,
+                ignore_done=ignore_done,
                )
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
@@ -169,6 +176,8 @@ def ppo_make_env(task_id, reward_shaping,idx, control_freq, capture_video, run_n
                 active_image=active_image,
                 verbose=verbose,
                 control_freq=control_freq,
+                ignore_done=ignore_done,
+
                 )
         
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
@@ -182,14 +191,14 @@ def ppo_make_env(task_id, reward_shaping,idx, control_freq, capture_video, run_n
     return thunk
 
 def load_ppo_checkpoint(checkpoint_path=None,
-                        task_id='lift', seed=1, gamma=0.99, control_freq=20, active_image=False, verbose=False):
+                        task_id='lift', seed=1, gamma=0.99, control_freq=20, active_image=False, verbose=False, ignore_done=False):
     args = Args()
     args.fix_object = False
     control_mode = "osc_position"
     # 환경 생성
     env = gym.vector.SyncVectorEnv(
         [ppo_make_env(
-            task_id='lift',#task_id, 
+            task_id=args.task_id,#task_id, 
             reward_shaping=True,
             idx=0, 
             capture_video=False, 
@@ -202,6 +211,7 @@ def load_ppo_checkpoint(checkpoint_path=None,
             control_mode=control_mode,
             control_freq=control_freq,
             verbose=verbose,
+            ignore_done=ignore_done,
             )
         ]
     )
@@ -414,7 +424,7 @@ if __name__ == "__main__":
             active_rewards=args.active_rewards, 
             fix_object=args.fix_object,
             control_freq=args.control_freq,
-
+            ignore_done=args.ignore_done,
             ) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"

@@ -120,6 +120,7 @@ class MujocoEnv(metaclass=EnvMeta):
         print(f"control_freq: {control_freq}")
         self.horizon = horizon
         self.ignore_done = ignore_done
+        print(f"ignore_done: {ignore_done}")
         self.hard_reset = hard_reset
         self._xml_processor = None  # Function to process model xml in _initialize_sim() call
         self.model = None
@@ -131,6 +132,9 @@ class MujocoEnv(metaclass=EnvMeta):
 
         self.renderer = renderer
         self.renderer_config = renderer_config
+        
+        #jesnk
+        self.success = None
 
         # jesnk: image-states dict
         self.image_states = {}
@@ -448,8 +452,9 @@ class MujocoEnv(metaclass=EnvMeta):
         reward, success = self.reward(action) # jesnk: refomulate reward function
 
         # done if number of elapsed timesteps is greater than horizon
-        self.done = ((self.timestep >= self.horizon) and not self.ignore_done) or success
-
+        self.done = ((self.timestep >= self.horizon) and not self.ignore_done)
+        self.success = success
+        
         return reward, self.done, {}
 
     def reward(self, action):

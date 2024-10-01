@@ -48,6 +48,7 @@ def init_env (
         wandb_enabled=True,
         verbose=True,
         control_freq=20,
+        ignore_done=True,
     ):
     
     if task_id == 'pickplace':
@@ -80,13 +81,15 @@ def init_env (
             has_offscreen_renderer=True,  # needed if using pixel obs
             has_renderer=False,  # make sure we can render to the screen
             control_freq=control_freq,  # control should happen fast enough so that simulation looks smooth
-            render_camera='agentview',
-            camera_names='agentview',
+            render_camera='agentview' ,
+            camera_names='agentview' ,
             camera_depths=True,
             wandb_enabled=wandb_enabled,
             active_rewards=active_rewards,
             fix_object = fix_object,
             controller_configs=controller_config,
+            ignore_done=ignore_done,
+
         )
     elif env_id == "Lift":
         rsenv = suite.make(
@@ -97,13 +100,14 @@ def init_env (
             has_offscreen_renderer=True,  # needed if using pixel obs
             has_renderer=False,  # make sure we can render to the screen
             control_freq=control_freq,  # control should happen fast enough so that simulation looks smooth
-            render_camera='agentview',
-            camera_names='agentview',
+            render_camera='agentview' ,
+            camera_names='agentview' ,
             camera_depths=True,
             wandb_enabled=wandb_enabled,
             #active_rewards=active_rewards,
             #fix_object = fix_object,
             controller_configs=controller_config,
+            ignore_done=ignore_done,
         )
     else :
         AssertionError(f"Invalid env_id: {env_id}")
