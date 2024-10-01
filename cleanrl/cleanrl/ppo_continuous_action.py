@@ -20,7 +20,7 @@ import numpy as np
 
 import wandb
 
-project_root_path = ["/research/rs4tmr", "/research/rs4tmr/cleanrl"]
+project_root_path = ["/research/rs4tmr", "/research/rs4tmr/cleanrl", "/data/jskang/rs4tmr", "/data/jskang/rs4tmr/cleanrl"]
 sys.path += project_root_path
 from my_utils import init_env, get_current_time
 import warnings
