@@ -32,6 +32,10 @@ def get_current_time(return_type='str', format=None):
     else:
         return "Fail to get current time"
 
+
+
+
+
 def init_env (
         task_id='pickplace',
         active_rewards = "rlhg", 
@@ -43,6 +47,7 @@ def init_env (
         return_raw_env=False, 
         wandb_enabled=True,
         verbose=True,
+        control_freq=20,
     ):
     
     if task_id == 'pickplace':
@@ -50,10 +55,10 @@ def init_env (
     elif task_id == 'lift':
         env_id = "Lift"
     else :
+        print(f"Invalid task_id: {task_id}")
         AssertionError(f"Invalid task_id: {task_id}")
     
-    print(f"Initalized env with init_env")
-    print(env_id)
+    #print(env_id)
     if control_mode == 'default':
         control_mode = None
     elif control_mode == 'osc':
@@ -74,7 +79,7 @@ def init_env (
             use_camera_obs=True,  # use pixel observations
             has_offscreen_renderer=True,  # needed if using pixel obs
             has_renderer=False,  # make sure we can render to the screen
-            control_freq=20,  # control should happen fast enough so that simulation looks smooth
+            control_freq=control_freq,  # control should happen fast enough so that simulation looks smooth
             render_camera='agentview',
             camera_names='agentview',
             camera_depths=True,
@@ -91,7 +96,7 @@ def init_env (
             use_camera_obs=True,  # use pixel observations
             has_offscreen_renderer=True,  # needed if using pixel obs
             has_renderer=False,  # make sure we can render to the screen
-            control_freq=20,  # control should happen fast enough so that simulation looks smooth
+            control_freq=control_freq,  # control should happen fast enough so that simulation looks smooth
             render_camera='agentview',
             camera_names='agentview',
             camera_depths=True,
@@ -213,7 +218,7 @@ def init_env (
     for observable in selected_observable_list:
         rsenv.modify_observable(observable, 'enabled', True)
         rsenv.modify_observable(observable, 'active', True)
-        
+    
 
     # print('Robosuite environment maked:',type(rsenv) , rsenv, dir(rsenv))
     # print(len(rsenv._observables.keys()))
@@ -247,9 +252,6 @@ def init_env (
     monitor_env = Monitor(wrapped_env)
     #set_random_seed(seed)
     return monitor_env#
-
-
-
 
 
 def init_env_2 (return_raw_env=False):

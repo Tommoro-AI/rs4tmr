@@ -14,10 +14,17 @@ from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
 import sys
 import os
+import datetime
+import gymnasium as gym
+import numpy as np
+
+import wandb
 
 project_root_path = ["/research/rs4tmr", "/research/rs4tmr/cleanrl"]
 sys.path += project_root_path
-
+from my_utils import init_env, get_current_time
+import warnings
+warnings.filterwarnings("ignore")
 
 @dataclass
 class Args:
@@ -97,10 +104,12 @@ class Args:
     task_id: str = "pickplace"
     reward_shaping: bool = False
     control_mode: str = "default"
+    control_freq: int = 20
+    num_eval_episodes: int = 10
     
 
-import gymnasium as gym
-import numpy as np
+
+
 
 class NormalizeObservationCustom(gym.wrappers.NormalizeObservation):
     def save_obs_running_average(self, path):
@@ -133,11 +142,104 @@ class NormalizeRewardCustom(gym.wrappers.NormalizeReward):
         self.return_rms.count = data['count']
 
 
+def ppo_make_env(task_id, reward_shaping,idx, control_freq, capture_video, run_name, gamma, control_mode='osc',wandb_enabled=True, active_rewards="rglh", fix_object=False,active_image=False, verbose=True):
+    def thunk():
+        capture_video = False
+        if capture_video and idx == 0:
+            env = init_env(
+                task_id=task_id,
+                wandb_enabled=wandb_enabled, 
+                reward_shaping=reward_shaping,
+                control_mode=control_mode,
+                active_rewards=active_rewards, 
+                fix_object=fix_object, 
+                active_image=active_image,
+                verbose=verbose,
+                control_freq=control_freq,
+               )
+            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        else:
+            env = init_env(
+                task_id=task_id,
+                wandb_enabled=wandb_enabled,
+                reward_shaping=reward_shaping, 
+                control_mode=control_mode,
+                active_rewards=active_rewards, 
+                fix_object=fix_object, 
+                active_image=active_image,
+                verbose=verbose,
+                control_freq=control_freq,
+                )
+        
+        env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
+        #env = gym.wrappers.RecordEpisodeStatistics(env)
+        env = gym.wrappers.ClipAction(env)
+        env = NormalizeObservationCustom(env)  # 커스텀 래퍼 사용
+        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+        env = NormalizeRewardCustom(env, gamma=gamma)  # 커스텀 래퍼 사용
+        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
+        return env
+    return thunk
+
+def load_ppo_checkpoint(checkpoint_path, path_prefix="/research/rs4tmr/cleanrl/cleanrl/",task_id='lift', seed=1, gamma=0.99, control_freq=20, active_image=False, verbose=False):
+    args = Args()
+    args.fix_object = False
+    control_mode = "osc_position"
+    # 환경 생성
+    env = gym.vector.SyncVectorEnv(
+        [ppo_make_env(
+            task_id='lift',#task_id, 
+            reward_shaping=True,
+            idx=0, 
+            capture_video=False, 
+            run_name="eval", 
+            gamma= gamma, 
+            active_rewards="rghl",
+            active_image=active_image, 
+            fix_object=args.fix_object,
+            wandb_enabled=False,
+            control_mode=control_mode,
+            control_freq=control_freq,
+            verbose=verbose,
+            )
+        ]
+    )
+    
+        
+    # 디바이스 설정 (cuda가 가능하면 cuda 사용)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device == torch.device("cuda"):
+        if verbose:
+            print("Using CUDA")
+    else :
+        assert device == torch.device("cpu")
 
 
+    weight_path = path_prefix + checkpoint_path + ".cleanrl_model"
+    # Agent 초기화 및 모델 불러오기
+    agent = Agent(env).to(device)
+    agent.load_state_dict(torch.load(weight_path, map_location=device))
+    agent.eval()  # 평가 모드로 전환
+        
 
+    # 환경 생성 후
+    env_instance = env.envs[0]
+    # NormalizeObservationCustom 래퍼에 접근
+    normalize_obs_wrapper = env_instance
+    while not isinstance(normalize_obs_wrapper, NormalizeObservationCustom):
+        normalize_obs_wrapper = normalize_obs_wrapper.env
 
+    # NormalizeRewardCustom 래퍼에 접근
+    normalize_reward_wrapper = env_instance
+    while not isinstance(normalize_reward_wrapper, NormalizeRewardCustom):
+        normalize_reward_wrapper = normalize_reward_wrapper.env
 
+    # 상태 로드
+    normalize_obs_wrapper.load_obs_running_average(checkpoint_path + "_obs_rms.npz")
+    normalize_reward_wrapper.load_reward_running_average(checkpoint_path + "_reward_rms.npz")
+
+    return env, agent
+    
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
         if capture_video and idx == 0:
@@ -155,14 +257,83 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         return env
 
     return thunk
-from my_utils import init_env
-
-
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
+
+def load_model_and_evaluate(model_path, global_step=None,task_id=None, num_episodes=10, seed=1, gamma=0.99, verbose = False, wandb_log = False):
+    """
+    저장된 모델을 불러와 환경에서 평가를 수행하는 함수
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    env, agent = load_ppo_checkpoint(checkpoint_path=model_path, task_id=task_id, seed=seed, gamma=gamma, active_image=False, verbose=verbose)
+    eval_horizon = 200  # 평가 시 사용할 에피소드 길이
+    num_episodes = num_episodes
+    count_sucess = 0
+    # 평가 수행
+    total_rewards = []
+    for episode in range(num_episodes):
+        obs, _ = env.reset()
+        obs = torch.Tensor(obs).to(device)
+        done = False
+        episode_reward = 0
+          
+        for i in range(eval_horizon):
+            with torch.no_grad():
+                obs = torch.Tensor(obs).to(device)
+                action, _, _, _ = agent.get_action_and_value(obs)
+            obs, reward, terminations, truncations, info = env.step(action.cpu().numpy())
+            #print(f"reward: {reward}, terminations: {terminations}, truncations: {truncations}, infos: {infos}")
+            done = np.logical_or(terminations, truncations).any()
+            episode_reward += reward[0]  # 첫 번째 환경의 보상 합산
+            
+            if terminations:
+                count_sucess += 1
+                break            
+        if verbose:
+            print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Success: {terminations}, {i} step")
+        total_rewards.append(episode_reward)
+
+    env.close()
+    
+    if wandb_log:
+        wandb.log({"success_rateLM": count_sucess/num_episodes}, step=global_step)    
+    print(f"LM:Success Rate on {global_step}: {count_sucess/num_episodes}  {count_sucess}/{num_episodes}")
+
+def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, global_step=None):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    eval_horizon = 200  # 평가 시 사용할 에피소드 길이
+    num_episodes = num_episodes
+    count_sucess = 0
+    # 평가 수행
+    total_rewards = []
+    for episode in range(num_episodes):
+        obs, _ = env.reset()
+        obs = torch.Tensor(obs).to(device)
+        done = False
+        episode_reward = 0
+          
+        for i in range(eval_horizon):
+            with torch.no_grad():
+                obs = torch.Tensor(obs).to(device)
+                action, _, _, _ = agent.get_action_and_value(obs)
+            obs, reward, terminations, truncations, info = env.step(action.cpu().numpy())
+            #print(f"reward: {reward}, terminations: {terminations}, truncations: {truncations}, infos: {infos}")
+            done = np.logical_or(terminations, truncations).any()
+            episode_reward += reward[0]  # 첫 번째 환경의 보상 합산
+            
+            if terminations:
+                count_sucess += 1
+                break            
+        if verbose:
+            print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Success: {terminations}, {i} step")
+        total_rewards.append(episode_reward)
+        
+    if wandb_log:
+        wandb.log({"success_rateEO": count_sucess/num_episodes}, step=global_step)    
+    print(f"EO:Success Rate on {global_step}: {count_sucess/num_episodes}  {count_sucess}/{num_episodes}")
 
 
 class Agent(nn.Module):
@@ -196,50 +367,7 @@ class Agent(nn.Module):
             action = probs.sample()
         return action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x)
 
-import datetime
 
-
-
-def ppo_make_env(task_id, reward_shaping,idx, capture_video, run_name, gamma, control_mode='osc',wandb_enabled=True, active_rewards="rglh", fix_object=False,active_image=False, verbose=True):
-    def thunk():
-        capture_video = False
-        if capture_video and idx == 0:
-            env = init_env(
-                task_id=task_id,
-                wandb_enabled=wandb_enabled, 
-                reward_shaping=reward_shaping,
-                control_mode=control_mode,
-                active_rewards=active_rewards, 
-                fix_object=fix_object, 
-                active_image=active_image,
-                verbose=verbose
-               )
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        else:
-            env = init_env(
-                task_id=task_id,
-                wandb_enabled=wandb_enabled,
-                reward_shaping=reward_shaping, 
-                control_mode=control_mode,
-                active_rewards=active_rewards, 
-                fix_object=fix_object, 
-                active_image=active_image,
-                verbose=verbose
-                )
-            
-            
-        env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
-        #env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = gym.wrappers.ClipAction(env)
-        env = NormalizeObservationCustom(env)  # 커스텀 래퍼 사용
-        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
-        env = NormalizeRewardCustom(env, gamma=gamma)  # 커스텀 래퍼 사용
-        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
-        return env
-    return thunk
-
-from my_utils import get_current_time
-import wandb
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
@@ -283,7 +411,9 @@ if __name__ == "__main__":
             run_name=run_name, 
             gamma= args.gamma, 
             active_rewards=args.active_rewards, 
-            fix_object=args.fix_object
+            fix_object=args.fix_object,
+            control_freq=args.control_freq,
+
             ) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
@@ -438,9 +568,10 @@ if __name__ == "__main__":
         if args.save_model and global_step > args.save_interval and not global_step // args.save_interval in checksteps :
             print(f"### Saving model on {global_step}###")
             checksteps.append(global_step // args.save_interval)
-            model_path = f"runs/{run_name}/{args.exp_name}_{global_step}.cleanrl_model"
+            save_path = f"runs/{run_name}/{args.exp_name}_{global_step}"
+            model_path = save_path + ".cleanrl_model"
             torch.save(agent.state_dict(), model_path)
-            print(f"model saved to {model_path}")
+            print(f"model saved to {save_path}")
             # 래퍼 스택에서 각 래퍼에 접근하여 상태 저장
             
             env_instance = envs.envs[0]
@@ -459,6 +590,11 @@ if __name__ == "__main__":
             normalize_reward_wrapper.save_reward_running_average(f"runs/{run_name}/{args.exp_name}_{global_step}_reward_rms.npz")
             from cleanrl_utils.evals.ppo_eval import evaluate
 
+            print(f"### Evaluating model on {global_step}###")
+            print(f"{args.task_id}")
+            load_model_and_evaluate(save_path, global_step=global_step,task_id='lift', num_episodes=args.num_eval_episodes, seed=args.seed, gamma=args.gamma, verbose = False, wandb_log = True)
+
+            evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
             # episodic_returns = evaluate(
             #     model_path,
             #     jesnk_make_env,
@@ -476,13 +612,13 @@ if __name__ == "__main__":
             print(iteration)
 
     if args.save_model:
-        model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
-        torch.save(agent.state_dict(), model_path)
-        print(f"model saved to {model_path}")
+        save_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
+        torch.save(agent.state_dict(), save_path)
+        print(f"model saved to {save_path}")
         from cleanrl_utils.evals.ppo_eval import evaluate
 
         episodic_returns = evaluate(
-            model_path,
+            save_path,
             ppo_make_env,
             args.task_id,
             eval_episodes=10,

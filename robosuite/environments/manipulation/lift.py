@@ -241,7 +241,7 @@ class Lift(SingleArmEnv):
 
         # sparse completion reward
         success = self._check_success()
-        if success:
+        if False:
             print("Success")
         if success :
             if self.wandb_enabled:
@@ -269,7 +269,7 @@ class Lift(SingleArmEnv):
         if self.reward_scale is not None:
             reward *= self.reward_scale / 2.25
 
-        return reward
+        return reward, success
 
     def _load_model(self):
         """

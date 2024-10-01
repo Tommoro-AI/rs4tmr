@@ -117,6 +117,7 @@ class MujocoEnv(metaclass=EnvMeta):
         self._observables = {}  # Maps observable names to observable objects
         self._obs_cache = {}  # Maps observable names to pre-/partially-computed observable values
         self.control_freq = control_freq
+        print(f"control_freq: {control_freq}")
         self.horizon = horizon
         self.ignore_done = ignore_done
         self.hard_reset = hard_reset
@@ -444,10 +445,10 @@ class MujocoEnv(metaclass=EnvMeta):
                 - (bool) whether the current episode is completed or not
                 - (dict) empty dict to be filled with information by subclassed method
         """
-        reward = self.reward(action)
+        reward, success = self.reward(action) # jesnk: refomulate reward function
 
         # done if number of elapsed timesteps is greater than horizon
-        self.done = (self.timestep >= self.horizon) and not self.ignore_done
+        self.done = ((self.timestep >= self.horizon) and not self.ignore_done) or success
 
         return reward, self.done, {}
 
