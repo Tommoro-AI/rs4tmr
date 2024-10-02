@@ -308,9 +308,13 @@ def load_model_and_evaluate(model_path, global_step=None,task_id=None, num_episo
 
     env.close()
     
+    success_rate = count_sucess/num_episodes
     if wandb_log:
         wandb.log({"success_rateLM": count_sucess/num_episodes})    
-    print(f"LM:Success Rate on {global_step}: {count_sucess/num_episodes}  {count_sucess}/{num_episodes}")
+    print(f"LM:Success Rate on {global_step}: {success_rate}  {count_sucess}/{num_episodes}")
+    return success_rate
+    
+    
 
 def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, global_step=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -340,16 +344,17 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
         if verbose:
             print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Success: {terminations}, {i} step")
         total_rewards.append(episode_reward)
-        
+    success_rate = count_sucess/num_episodes
+
     if wandb_log:
         wandb.log({"success_rateEO": count_sucess/num_episodes})    
-    print(f"EO:Success Rate on {global_step}: {count_sucess/num_episodes}  {count_sucess}/{num_episodes}")
+    print(f"EO:Success Rate on {global_step}: {success_rate}  {count_sucess}/{num_episodes}")
+    return success_rate
 
 
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
-        print(f"sos: {envs.single_observation_space.shape}")
 
         self.critic = nn.Sequential(
             layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
@@ -451,6 +456,8 @@ if __name__ == "__main__":
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
+    best_eval_sr = 0
+
     for iteration in range(1, args.num_iterations + 1):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -458,6 +465,8 @@ if __name__ == "__main__":
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
+        # jesnk
+        episodic_return = None
         for step in range(0, args.num_steps):
             global_step += args.num_envs
             obs[step] = next_obs
@@ -482,6 +491,8 @@ if __name__ == "__main__":
                         print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+
+
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -604,13 +615,39 @@ if __name__ == "__main__":
 
             print(f"### Evaluating model on {global_step}###")
             print(f"{args.task_id}")
-            load_model_and_evaluate(save_path, global_step=global_step,task_id=args.task_id, 
+            sr_lm =load_model_and_evaluate(save_path, global_step=global_step,task_id=args.task_id, 
                                     num_episodes=args.num_eval_episodes, seed=args.seed, gamma=args.gamma, verbose = False, wandb_log = True,
                                     ignore_done=args.ignore_done
                                     )
-                                    
+            sr_eo = evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
 
-            evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
+                
+
+            # Save model if episodic_return is better than before
+            if (sr_lm + sr_eo)/2 > best_eval_sr:
+                best_eval_sr = (sr_lm + sr_eo)/2
+                if args.save_model:
+                    save_path = f"runs/{run_name}/{args.exp_name}_best"
+                    model_path = save_path + ".cleanrl_model"
+                    torch.save(agent.state_dict(), model_path)
+                    # save obs and reward running average
+                    env_instance = envs.envs[0]
+                    # NormalizeObservationCustom 래퍼에 접근
+                    normalize_obs_wrapper = env_instance
+                    while not isinstance(normalize_obs_wrapper, NormalizeObservationCustom):
+                        normalize_obs_wrapper = normalize_obs_wrapper.env
+                    
+                    # NormalizeRewardCustom 래퍼에 접근
+                    normalize_reward_wrapper = env_instance
+                    while not isinstance(normalize_reward_wrapper, NormalizeRewardCustom):
+                        normalize_reward_wrapper = normalize_reward_wrapper.env
+                        
+                    # 상태 저장
+                    normalize_obs_wrapper.save_obs_running_average(f"runs/{run_name}/{args.exp_name}_best_obs_rms.npz")
+                    normalize_reward_wrapper.save_reward_running_average(f"runs/{run_name}/{args.exp_name}_best_reward_rms.npz")
+        
+                    print(f"Best model saved to {save_path}, episodic_return={info['episode']['r']}")
+            
             # episodic_returns = evaluate(
             #     model_path,
             #     jesnk_make_env,
