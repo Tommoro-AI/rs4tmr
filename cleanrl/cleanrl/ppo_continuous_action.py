@@ -636,7 +636,6 @@ if __name__ == "__main__":
                                     num_episodes=args.num_eval_episodes, seed=args.seed, gamma=args.gamma, verbose = False, wandb_log = True,
                                     ignore_done=args.ignore_done,
                                     iota=args.iota,)
-                                    )
             sr_eo = evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
 
                 
