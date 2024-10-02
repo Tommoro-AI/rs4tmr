@@ -108,6 +108,7 @@ class Args:
     num_eval_episodes: int = 10
     ignore_done: bool = False
     iota: bool = False
+    load_model: str = None
     
 
 
@@ -192,7 +193,8 @@ def ppo_make_env(task_id, reward_shaping,idx, control_freq,
     return thunk
 
 def load_ppo_checkpoint(checkpoint_path=None,
-                        task_id='lift', iota = False, 
+                        task_id='lift', 
+                        iota = False, 
                         seed=1, 
                         gamma=0.99, control_freq=20, active_image=False, verbose=False, ignore_done=False):
     args = Args()
@@ -227,7 +229,7 @@ def load_ppo_checkpoint(checkpoint_path=None,
     else :
         assert device == torch.device("cpu")
 
-    if not iota :
+    if iota == False :
         path_prefix="/research/rs4tmr/cleanrl/cleanrl/"
     else :
         path_prefix="/data/jskang/rs4tmr/cleanrl/cleanrl/"
@@ -316,11 +318,11 @@ def load_model_and_evaluate(model_path, global_step=None,
             done = np.logical_or(terminations, truncations).any()
             episode_reward += reward[0]  # 첫 번째 환경의 보상 합산
             
-            if terminations:
+            if env.envs[0].is_success:
                 count_sucess += 1
                 break            
         if verbose:
-            print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Success: {terminations}, {i} step")
+            print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Success: {env.envs[0].is_success}, {i} step")
         total_rewards.append(episode_reward)
 
     env.close()
@@ -355,11 +357,11 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
             done = np.logical_or(terminations, truncations).any()
             episode_reward += reward[0]  # 첫 번째 환경의 보상 합산
             
-            if terminations:
+            if env.envs[0].is_success:
                 count_sucess += 1
                 break            
         if verbose:
-            print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Success: {terminations}, {i} step")
+            print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Success: {env.envs[0].is_success}, {i} step")
         total_rewards.append(episode_reward)
     success_rate = count_sucess/num_episodes
 
@@ -434,25 +436,40 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    # env setup
-    envs = gym.vector.SyncVectorEnv(
-        [ppo_make_env(
-            task_id=args.task_id, 
-            reward_shaping=args.reward_shaping,
-            idx=i, 
-            capture_video=args.capture_video, 
-            control_mode=args.control_mode,
-            run_name=run_name, 
-            gamma= args.gamma, 
-            active_rewards=args.active_rewards, 
-            fix_object=args.fix_object,
-            control_freq=args.control_freq,
-            ignore_done=args.ignore_done,
-            ) for i in range(args.num_envs)]
-    )
-    assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
+    # check args.load_model
 
-    agent = Agent(envs).to(device)
+
+    if not args.load_model:
+    # env setup
+        envs = gym.vector.SyncVectorEnv(
+            [ppo_make_env(
+                task_id=args.task_id, 
+                reward_shaping=args.reward_shaping,
+                idx=i, 
+                capture_video=args.capture_video, 
+                control_mode=args.control_mode,
+                run_name=run_name, 
+                gamma= args.gamma, 
+                active_rewards=args.active_rewards, 
+                fix_object=args.fix_object,
+                control_freq=args.control_freq,
+                ignore_done=args.ignore_done,
+                ) for i in range(args.num_envs)]
+        )
+        assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
+
+        agent = Agent(envs).to(device)
+    else :
+        if args.load_model:
+            # temporal load model
+            args.load_model = "runs/lift_ppo_cf20,eval_best_test_s1__2024-10-02 15:34:37/ppo_continuous_action_950272"
+            print(f"### Loading model on {args.load_model}###")
+            
+            envs, agent = load_ppo_checkpoint(checkpoint_path=args.load_model, 
+                                         task_id=args.task_id, seed=args.seed, gamma=args.gamma, 
+                                         active_image=False, verbose=False, ignore_done=args.ignore_done,
+                                         )
+        
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup

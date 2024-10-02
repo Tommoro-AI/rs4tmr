@@ -134,7 +134,7 @@ class MujocoEnv(metaclass=EnvMeta):
         self.renderer_config = renderer_config
         
         #jesnk
-        self.success = None
+        self.is_success = None
 
         # jesnk: image-states dict
         self.image_states = {}
@@ -287,7 +287,8 @@ class MujocoEnv(metaclass=EnvMeta):
             if self.viewer_get_obs
             else self._get_observations(force_update=True)
         )
-        
+        #jesnk
+        self.is_success = False
         # Return new observations
         return observations
 
@@ -453,7 +454,7 @@ class MujocoEnv(metaclass=EnvMeta):
 
         # done if number of elapsed timesteps is greater than horizon
         self.done = (self.timestep >= self.horizon) and not self.ignore_done
-        self.success = success
+        self.is_success = success
         
         return reward, self.done, {}
 
