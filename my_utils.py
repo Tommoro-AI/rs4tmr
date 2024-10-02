@@ -64,15 +64,16 @@ def init_env (
 
     if control_mode == 'default':
         control_mode = None
-    elif control_mode == 'osc':
+    elif control_mode == 'OSC_POSE':
         control_mode = 'OSC_POSE'
-    elif control_mode == 'osc_position':
+    elif control_mode == 'OSC_POSITION':
         control_mode = 'OSC_POSITION'
     elif control_mode == 'ik':
         control_mode = 'IK_POSE'
     else :
         AssertionError(f"Invalid control_mode: {control_mode}")
     controller_config = load_controller_config(default_controller=control_mode)
+    print(f"### controller_config: {control_mode} ###")
 
     if env_id == "TmrPickPlaceCan":
         rsenv = suite.make(

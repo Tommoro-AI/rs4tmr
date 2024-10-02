@@ -103,7 +103,7 @@ class Args:
     fix_object: bool = False
     task_id: str = "pickplace"
     reward_shaping: bool = False
-    control_mode: str = "default"
+    control_mode: str = "OSC_POSITION"
     control_freq: int = 20
     num_eval_episodes: int = 10
     ignore_done: bool = False
@@ -146,7 +146,8 @@ class NormalizeRewardCustom(gym.wrappers.NormalizeReward):
 
 
 def ppo_make_env(task_id, reward_shaping,idx, control_freq, 
-                 capture_video, run_name, gamma, control_mode='osc',wandb_enabled=True, 
+                 capture_video, run_name, gamma, 
+                 control_mode='OSC_POSE',wandb_enabled=True, 
                  active_rewards="rglh", fix_object=False,active_image=False, verbose=True,
                  ignore_done=False,
                  
@@ -196,10 +197,10 @@ def load_ppo_checkpoint(checkpoint_path=None,
                         task_id='lift', 
                         iota = False, 
                         seed=1, 
+                        control_mode='OSC_POSITION',
                         gamma=0.99, control_freq=20, active_image=False, verbose=False, ignore_done=False):
     args = Args()
     args.fix_object = False
-    control_mode = "osc_position"
     # 환경 생성
     env = gym.vector.SyncVectorEnv(
         [ppo_make_env(
@@ -286,6 +287,7 @@ def load_model_and_evaluate(model_path, global_step=None,
                             seed=1, iota=False, 
                             gamma=0.99, verbose = False, wandb_log = False, 
                             ignore_done=False,
+                            control_mode='OSC_POSITION',
                             ):
     """
     저장된 모델을 불러와 환경에서 평가를 수행하는 함수
@@ -295,6 +297,7 @@ def load_model_and_evaluate(model_path, global_step=None,
                                      task_id=task_id, seed=seed, gamma=gamma, 
                                      active_image=False, verbose=verbose, 
                                      ignore_done=ignore_done,
+                                     control_mode=control_mode,
                                      iota=iota,
                                      )
                                      
@@ -650,8 +653,10 @@ if __name__ == "__main__":
             print(f"### Evaluating model on {global_step}###")
             print(f"{args.task_id}")
             sr_lm =load_model_and_evaluate(save_path, global_step=global_step,task_id=args.task_id, 
-                                    num_episodes=args.num_eval_episodes, seed=args.seed, gamma=args.gamma, verbose = False, wandb_log = True,
+                                    num_episodes=args.num_eval_episodes, seed=args.seed, 
+                                    gamma=args.gamma, verbose = False, wandb_log = True,
                                     ignore_done=args.ignore_done,
+                                    control_mode=args.control_mode,
                                     iota=args.iota,)
             sr_eo = evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
 
