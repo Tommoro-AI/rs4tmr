@@ -107,6 +107,7 @@ class Args:
     control_freq: int = 20
     num_eval_episodes: int = 10
     ignore_done: bool = False
+    iota: bool = False
     
 
 
@@ -191,7 +192,9 @@ def ppo_make_env(task_id, reward_shaping,idx, control_freq,
     return thunk
 
 def load_ppo_checkpoint(checkpoint_path=None,
-                        task_id='lift', seed=1, gamma=0.99, control_freq=20, active_image=False, verbose=False, ignore_done=False):
+                        task_id='lift', iota = False, 
+                        seed=1, 
+                        gamma=0.99, control_freq=20, active_image=False, verbose=False, ignore_done=False):
     args = Args()
     args.fix_object = False
     control_mode = "osc_position"
@@ -224,7 +227,10 @@ def load_ppo_checkpoint(checkpoint_path=None,
     else :
         assert device == torch.device("cpu")
 
-    path_prefix="/research/rs4tmr/cleanrl/cleanrl/"
+    if not iota :
+        path_prefix="/research/rs4tmr/cleanrl/cleanrl/"
+    else :
+        path_prefix="/data/jskang/rs4tmr/cleanrl/cleanrl/"
     weight_path = path_prefix + checkpoint_path + ".cleanrl_model"
     # Agent 초기화 및 모델 불러오기
     agent = Agent(env).to(device)
@@ -273,12 +279,23 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
 
-def load_model_and_evaluate(model_path, global_step=None,task_id=None, num_episodes=10, seed=1, gamma=0.99, verbose = False, wandb_log = False, ignore_done=False):
+def load_model_and_evaluate(model_path, global_step=None,
+                            task_id=None, num_episodes=10, 
+                            seed=1, iota=False, 
+                            gamma=0.99, verbose = False, wandb_log = False, 
+                            ignore_done=False,
+                            ):
     """
     저장된 모델을 불러와 환경에서 평가를 수행하는 함수
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    env, agent = load_ppo_checkpoint(checkpoint_path=model_path, task_id=task_id, seed=seed, gamma=gamma, active_image=False, verbose=verbose, ignore_done=ignore_done)
+    env, agent = load_ppo_checkpoint(checkpoint_path=model_path, 
+                                     task_id=task_id, seed=seed, gamma=gamma, 
+                                     active_image=False, verbose=verbose, 
+                                     ignore_done=ignore_done,
+                                     iota=iota,
+                                     )
+                                     
     eval_horizon = 200  # 평가 시 사용할 에피소드 길이
     num_episodes = num_episodes
     count_sucess = 0
@@ -617,7 +634,8 @@ if __name__ == "__main__":
             print(f"{args.task_id}")
             sr_lm =load_model_and_evaluate(save_path, global_step=global_step,task_id=args.task_id, 
                                     num_episodes=args.num_eval_episodes, seed=args.seed, gamma=args.gamma, verbose = False, wandb_log = True,
-                                    ignore_done=args.ignore_done
+                                    ignore_done=args.ignore_done,
+                                    iota=args.iota,)
                                     )
             sr_eo = evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
 
