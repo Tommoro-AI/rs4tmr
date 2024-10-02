@@ -59,7 +59,9 @@ def init_env (
         print(f"Invalid task_id: {task_id}")
         AssertionError(f"Invalid task_id: {task_id}")
     
-    #print(env_id)
+    if verbose:
+        print(f"init_env: task_id: {task_id}")
+
     if control_mode == 'default':
         control_mode = None
     elif control_mode == 'osc':

@@ -198,24 +198,23 @@ def load_ppo_checkpoint(checkpoint_path=None,
     # 환경 생성
     env = gym.vector.SyncVectorEnv(
         [ppo_make_env(
-            task_id=args.task_id,#task_id, 
+            task_id= task_id,#task_id, 
             reward_shaping=True,
             idx=0, 
             capture_video=False, 
+            control_mode=control_mode,
             run_name="eval", 
             gamma= gamma, 
             active_rewards="rghl",
             active_image=active_image, 
             fix_object=args.fix_object,
-            wandb_enabled=False,
-            control_mode=control_mode,
             control_freq=control_freq,
-            verbose=verbose,
             ignore_done=ignore_done,
+            wandb_enabled=False,
+            verbose=verbose,
             )
         ]
     )
-    
         
     # 디바이스 설정 (cuda가 가능하면 cuda 사용)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -274,12 +273,12 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
 
-def load_model_and_evaluate(model_path, global_step=None,task_id=None, num_episodes=10, seed=1, gamma=0.99, verbose = False, wandb_log = False):
+def load_model_and_evaluate(model_path, global_step=None,task_id=None, num_episodes=10, seed=1, gamma=0.99, verbose = False, wandb_log = False, ignore_done=False):
     """
     저장된 모델을 불러와 환경에서 평가를 수행하는 함수
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    env, agent = load_ppo_checkpoint(checkpoint_path=model_path, task_id=task_id, seed=seed, gamma=gamma, active_image=False, verbose=verbose)
+    env, agent = load_ppo_checkpoint(checkpoint_path=model_path, task_id=task_id, seed=seed, gamma=gamma, active_image=False, verbose=verbose, ignore_done=ignore_done)
     eval_horizon = 200  # 평가 시 사용할 에피소드 길이
     num_episodes = num_episodes
     count_sucess = 0
@@ -350,6 +349,8 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
+        print(f"sos: {envs.single_observation_space.shape}")
+
         self.critic = nn.Sequential(
             layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
             nn.Tanh(),
@@ -603,7 +604,11 @@ if __name__ == "__main__":
 
             print(f"### Evaluating model on {global_step}###")
             print(f"{args.task_id}")
-            load_model_and_evaluate(save_path, global_step=global_step,task_id='lift', num_episodes=args.num_eval_episodes, seed=args.seed, gamma=args.gamma, verbose = False, wandb_log = True)
+            load_model_and_evaluate(save_path, global_step=global_step,task_id=args.task_id, 
+                                    num_episodes=args.num_eval_episodes, seed=args.seed, gamma=args.gamma, verbose = False, wandb_log = True,
+                                    ignore_done=args.ignore_done
+                                    )
+                                    
 
             evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
             # episodic_returns = evaluate(
