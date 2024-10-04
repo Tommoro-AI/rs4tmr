@@ -413,6 +413,8 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
+    if args.seed == -1 :
+        args.seed = random.randint(1, 100000)
     run_name = f"{args.task_id}_ppo_{args.tags}_s{args.seed}__{get_current_time()}"
     if args.track:
         wandb.init(
@@ -432,6 +434,7 @@ if __name__ == "__main__":
     )
 
     # TRY NOT TO MODIFY: seeding
+
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
