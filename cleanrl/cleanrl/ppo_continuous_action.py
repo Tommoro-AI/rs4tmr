@@ -531,6 +531,8 @@ if __name__ == "__main__":
                         print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                        wandb.log({"episodic_return": info["episode"]["r"], "episodic_length": info["episode"]["l"]})
+                        wandb.log({"success_signal": envs.envs[0].is_success})
 
 
 
@@ -655,15 +657,22 @@ if __name__ == "__main__":
 
             print(f"### Evaluating model on {global_step}###")
             print(f"{args.task_id}")
-            sr_lm =load_model_and_evaluate(save_path, global_step=global_step,task_id=args.task_id, 
-                                    num_episodes=args.num_eval_episodes, seed=args.seed, 
-                                    gamma=args.gamma, verbose = False, wandb_log = True,
-                                    ignore_done=args.ignore_done,
-                                    control_mode=args.control_mode,
-                                    iota=args.iota,)
-            sr_eo = evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
-
-                
+            
+            sr_lm_active = False
+            sr_eo_active = True
+            if sr_lm_active :            
+                sr_lm =load_model_and_evaluate(save_path, global_step=global_step,task_id=args.task_id, 
+                                        num_episodes=args.num_eval_episodes, seed=args.seed, 
+                                        gamma=args.gamma, verbose = False, wandb_log = True,
+                                        ignore_done=args.ignore_done,
+                                        control_mode=args.control_mode,
+                                        iota=args.iota,)
+            else :
+                sr_lm = 0
+            if sr_eo_active :
+                sr_eo = evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
+            else:
+                sr_eo = 0
 
             # Save model if episodic_return is better than before
             if (sr_lm + sr_eo)/2 > best_eval_sr:

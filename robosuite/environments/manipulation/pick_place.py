@@ -313,9 +313,7 @@ class PickPlace(SingleArmEnv):
         """
 
         reach_mult = 0.1
-        grasp_mult = 0.35
-        lift_mult = 0.5
-        hover_mult = 0.7
+
 
         # filter out objects that are already in the correct bins
         active_objs = []
@@ -339,56 +337,7 @@ class PickPlace(SingleArmEnv):
             ]
             r_reach = (1 - np.tanh(10.0 * min(dists))) * reach_mult
 
-        # grasping reward for touching any objects of interest
-        r_grasp = (
-            int(
-                self._check_grasp(
-                    gripper=self.robots[0].gripper,
-                    object_geoms=[g for active_obj in active_objs for g in active_obj.contact_geoms],
-                )
-            )
-            * grasp_mult
-        )
-
-        # lifting reward for picking up an object
-        r_lift = 0.0
-        if active_objs and r_grasp > 0.0:
-            z_target = self.bin2_pos[2] + 0.25
-            object_z_locs = self.sim.data.body_xpos[[self.obj_body_id[active_obj.name] for active_obj in active_objs]][
-                :, 2
-            ]
-            z_dists = np.maximum(z_target - object_z_locs, 0.0)
-            r_lift = grasp_mult + (1 - np.tanh(15.0 * min(z_dists))) * (lift_mult - grasp_mult)
-
-        # hover reward for getting object above bin
-        r_hover = 0.0
-        if active_objs:
-            target_bin_ids = [self.object_to_id[active_obj.name.lower()] for active_obj in active_objs]
-            # segment objects into left of the bins and above the bins
-            object_xy_locs = self.sim.data.body_xpos[[self.obj_body_id[active_obj.name] for active_obj in active_objs]][
-                :, :2
-            ]
-            y_check = (
-                np.abs(object_xy_locs[:, 1] - self.target_bin_placements[target_bin_ids, 1]) < self.bin_size[1] / 4.0
-            )
-            x_check = (
-                np.abs(object_xy_locs[:, 0] - self.target_bin_placements[target_bin_ids, 0]) < self.bin_size[0] / 4.0
-            )
-            objects_above_bins = np.logical_and(x_check, y_check)
-            objects_not_above_bins = np.logical_not(objects_above_bins)
-            dists = np.linalg.norm(self.target_bin_placements[target_bin_ids, :2] - object_xy_locs, axis=1)
-            # objects to the left get r_lift added to hover reward,
-            # those on the right get max(r_lift) added (to encourage dropping)
-            r_hover_all = np.zeros(len(active_objs))
-            r_hover_all[objects_above_bins] = lift_mult + (1 - np.tanh(10.0 * dists[objects_above_bins])) * (
-                hover_mult - lift_mult
-            )
-            r_hover_all[objects_not_above_bins] = r_lift + (1 - np.tanh(10.0 * dists[objects_not_above_bins])) * (
-                hover_mult - lift_mult
-            )
-            r_hover = np.max(r_hover_all)
-
-        return r_reach, r_grasp, r_lift, r_hover
+        return r_reach
 
     def not_in_bin(self, obj_pos, bin_id):
 
@@ -732,6 +681,43 @@ class PickPlace(SingleArmEnv):
                     self._observables[name].set_active(i == self.object_id)
 
     def _check_success(self):
+        """
+        Check if all objects have been successfully placed in their corresponding bins.
+
+        Returns:
+            bool: True if all objects are placed correctly
+        """
+        # remember objects that are in the correct bins
+        # filter out objects that are already in the correct bins
+        active_objs = []
+        for i, obj in enumerate(self.objects):
+            if self.objects_in_bins[i]:
+                continue
+            active_objs.append(obj)
+        # reaching reward governed by distance to closest object
+        threshold=0.01
+        if active_objs:
+            # get reaching reward via minimum distance to a target object
+            dists = [
+                self._gripper_to_target(
+                    gripper=self.robots[0].gripper,
+                    target=active_obj.root_body,
+                    target_type="body",
+                    return_distance=True,
+                )
+                for active_obj in active_objs
+            ]
+            if len(dists) > 1 :
+                AssertionError ("More than one object in the scene")
+            elif dists[0] < threshold :
+                return True
+            else :
+                return False
+        else :
+            AssertionError ("No object in the scene")
+
+    
+    def _check_success_origin(self):
         """
         Check if all objects have been successfully placed in their corresponding bins.
 

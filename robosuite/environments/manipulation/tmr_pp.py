@@ -204,6 +204,7 @@ class TmrPickPlace(SingleArmEnv):
         active_rewards = "rglh",
         fix_object = False,
     ):
+        print(f"#### J PickPlace ####")
         # task settings
         self.single_object_mode = single_object_mode
         self.object_to_id = {"milk": 0, "bread": 1, "cereal": 2, "can": 3}
@@ -238,17 +239,7 @@ class TmrPickPlace(SingleArmEnv):
         self.fix_object = fix_object
         print(f"fix_object:{self.fix_object}")
         self.wandb_enabled = wandb_enabled
-        
-        self.active_rewards = []
-        if "r" in active_rewards:
-            self.active_rewards.append("r")
-        if "g" in active_rewards:
-            self.active_rewards.append("g")
-        if "l" in active_rewards:
-            self.active_rewards.append("l")
-        if "h" in active_rewards:
-            self.active_rewards.append("h")
-        print("active_rewards:", self.active_rewards)
+    
         
 
         super().__init__(
@@ -306,33 +297,23 @@ class TmrPickPlace(SingleArmEnv):
             float: reward value
         """
         # compute sparse rewards
-        sucess = self._check_success() # jesnk
-        if sucess:
-            print("sucess")
-            if self.wandb_enabled:
-                wandb.log({"sucess": 1})
-        else:
-            if self.wandb_enabled :
-                wandb.log({"sucess": 0})
-        
+        success = self._check_success() # jesnk
+
         reward = np.sum(self.objects_in_bins)
 
         # add in shaped rewards
         if self.reward_shaping:
             staged_rewards = self.staged_rewards()
-            reward += max(staged_rewards)
-            if self.wandb_enabled:
-                wandb.log({"r_reward": staged_rewards[0], "g_reward": staged_rewards[1], "l_reward": staged_rewards[2], "h_reward": staged_rewards[3]})
-                wandb.log({"reward": reward})
+            #reward += max(staged_rewards)
+            reward += staged_rewards
+
+
         if self.reward_scale is not None:
             reward *= self.reward_scale
             if self.single_object_mode == 0:
                 reward /= 4.0
-            if self.wandb_enabled:
-                wandb.log({"reward": reward})
                 
-        
-        return reward
+        return reward, success
 
     def staged_rewards(self):
         """
@@ -349,9 +330,7 @@ class TmrPickPlace(SingleArmEnv):
         """
 
         reach_mult = 0.1
-        grasp_mult = 0.35
-        lift_mult = 0.5
-        hover_mult = 0.7
+
 
         # filter out objects that are already in the correct bins
         active_objs = []
@@ -374,72 +353,11 @@ class TmrPickPlace(SingleArmEnv):
                 for active_obj in active_objs
             ]
             r_reach = (1 - np.tanh(10.0 * min(dists))) * reach_mult
-        
-        #jesnk
-        if min(dists) < 0.005 :
-            print("min(dists):", min(dists), "r_reach:", r_reach)
 
-        # grasping reward for touching any objects of interest
-        r_grasp = (
-            int(
-                self._check_grasp(
-                    gripper=self.robots[0].gripper,
-                    object_geoms=[g for active_obj in active_objs for g in active_obj.contact_geoms],
-                )
-            )
-            * grasp_mult
-        )
-
-        # lifting reward for picking up an object
-        r_lift = 0.0
-        if active_objs and r_grasp > 0.0:
-            z_target = self.bin2_pos[2] + 0.25
-            object_z_locs = self.sim.data.body_xpos[[self.obj_body_id[active_obj.name] for active_obj in active_objs]][
-                :, 2
-            ]
-            z_dists = np.maximum(z_target - object_z_locs, 0.0)
-            r_lift = grasp_mult + (1 - np.tanh(15.0 * min(z_dists))) * (lift_mult - grasp_mult)
-
-        # hover reward for getting object above bin
-        r_hover = 0.0
-        if active_objs:
-            target_bin_ids = [self.object_to_id[active_obj.name.lower()] for active_obj in active_objs]
-            # segment objects into left of the bins and above the bins
-            object_xy_locs = self.sim.data.body_xpos[[self.obj_body_id[active_obj.name] for active_obj in active_objs]][
-                :, :2
-            ]
-            y_check = (
-                np.abs(object_xy_locs[:, 1] - self.target_bin_placements[target_bin_ids, 1]) < self.bin_size[1] / 4.0
-            )
-            x_check = (
-                np.abs(object_xy_locs[:, 0] - self.target_bin_placements[target_bin_ids, 0]) < self.bin_size[0] / 4.0
-            )
-            objects_above_bins = np.logical_and(x_check, y_check)
-            objects_not_above_bins = np.logical_not(objects_above_bins)
-            dists = np.linalg.norm(self.target_bin_placements[target_bin_ids, :2] - object_xy_locs, axis=1)
-            # objects to the left get r_lift added to hover reward,
-            # those on the right get max(r_lift) added (to encourage dropping)
-            r_hover_all = np.zeros(len(active_objs))
-            r_hover_all[objects_above_bins] = lift_mult + (1 - np.tanh(10.0 * dists[objects_above_bins])) * (
-                hover_mult - lift_mult
-            )
-            r_hover_all[objects_not_above_bins] = r_lift + (1 - np.tanh(10.0 * dists[objects_not_above_bins])) * (
-                hover_mult - lift_mult
-            )
-            r_hover = np.max(r_hover_all)
-        
-        # jesnk: masking the rewards, only actived rewards are has value, others 0
-        if "r" not in self.active_rewards:
-            r_reach = 0
-        if "g" not in self.active_rewards:
-            r_grasp = 0
-        if "l" not in self.active_rewards:
-            r_lift = 0
-        if "h" not in self.active_rewards:
-            r_hover = 0
-
-        return r_reach, r_grasp, r_lift, r_hover
-
+        return r_reach
+    
+    
+    
     def not_in_bin(self, obj_pos, bin_id):
 
         bin_x_low = self.bin2_pos[0]
@@ -866,20 +784,34 @@ class TmrPickPlace(SingleArmEnv):
             bool: True if all objects are placed correctly
         """
         # remember objects that are in the correct bins
-        gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
+        # filter out objects that are already in the correct bins
+        active_objs = []
         for i, obj in enumerate(self.objects):
-            obj_str = obj.name
-            obj_pos = self.sim.data.body_xpos[self.obj_body_id[obj_str]]
-            dist = np.linalg.norm(gripper_site_pos - obj_pos)
-            r_reach = 1 - np.tanh(10.0 * dist)
-            self.objects_in_bins[i] = int((not self.not_in_bin(obj_pos, i)) and r_reach < 0.6)
-
-        # returns True if a single object is in the correct bin
-        if self.single_object_mode in {1, 2}:
-            return np.sum(self.objects_in_bins) > 0
-
-        # returns True if all objects are in correct bins
-        return np.sum(self.objects_in_bins) == len(self.objects)
+            if self.objects_in_bins[i]:
+                continue
+            active_objs.append(obj)
+        # reaching reward governed by distance to closest object
+        threshold=0.005
+        if active_objs:
+            # get reaching reward via minimum distance to a target object
+            dists = [
+                self._gripper_to_target(
+                    gripper=self.robots[0].gripper,
+                    target=active_obj.root_body,
+                    target_type="body",
+                    return_distance=True,
+                )
+                for active_obj in active_objs
+            ]
+            if len(dists) > 1 :
+                AssertionError ("More than one object in the scene")
+            elif dists[0] < threshold :
+                return True
+            else :
+                return False
+        else :
+            AssertionError ("No object in the scene")
+        
 
     def visualize(self, vis_settings):
         """
