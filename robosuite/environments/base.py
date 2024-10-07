@@ -409,6 +409,17 @@ class MujocoEnv(metaclass=EnvMeta):
         # or an actual policy update
         policy_step = True
 
+        ### TMR: jesnk
+        # Drop 4th action value
+        if hasattr(self, 'is_tmr') and self.is_tmr and action.shape[0] == 4:
+            
+            #print(f"pre-action: {action}")
+            action[3] = 0
+            #print(f"post-action: {action}")
+
+        
+        ###
+
         # Loop through the simulation at the model timestep rate until we're ready to take the next policy step
         # (as defined by the control frequency specified at the environment level)
         for i in range(int(self.control_timestep / self.model_timestep)):

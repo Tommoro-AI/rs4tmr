@@ -239,6 +239,7 @@ class TmrPickPlace(SingleArmEnv):
         self.fix_object = fix_object
         print(f"fix_object:{self.fix_object}")
         self.wandb_enabled = wandb_enabled
+        self.is_tmr = True
     
         
 
