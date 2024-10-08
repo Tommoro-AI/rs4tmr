@@ -210,6 +210,7 @@ class TmrPickPlace(SingleArmEnv):
         self.object_to_id = {"milk": 0, "bread": 1, "cereal": 2, "can": 3}
         self.object_id_to_sensors = {}  # Maps object id to sensor names for that object
         self.obj_names = ["Milk", "Bread", "Cereal", "Can"]
+        #object_type="bread"
         if object_type is not None:
             assert object_type in self.object_to_id.keys(), "invalid @object_type argument - choose one of {}".format(
                 list(self.object_to_id.keys())
@@ -239,8 +240,9 @@ class TmrPickPlace(SingleArmEnv):
         self.fix_object = fix_object
         print(f"fix_object:{self.fix_object}")
         self.wandb_enabled = wandb_enabled
-        self.is_tmr = True
-    
+        self.grasp_lock = True
+        print(f"start with grasp lock: {self.grasp_lock}")
+        self.check_success_dist = 0
         
 
         super().__init__(
@@ -398,8 +400,8 @@ class TmrPickPlace(SingleArmEnv):
                 mujoco_objects=self.objects,
                 x_range=[-bin_x_half, bin_x_half],
                 y_range=[-bin_y_half, bin_y_half],
-                rotation=self.z_rotation,
-                rotation_axis="z",
+                rotation=1.57,# self.z_rotation, #jesnk: object rotation, 90 degrees with respect to y-axis
+                rotation_axis="y",
                 ensure_object_boundary_in_range=True,
                 ensure_valid_placement=True,
                 reference_pos=self.bin1_pos,
@@ -792,9 +794,14 @@ class TmrPickPlace(SingleArmEnv):
                 continue
             active_objs.append(obj)
         # reaching reward governed by distance to closest object
-        threshold=0.005
+        threshold=0.04
         if active_objs:
             # get reaching reward via minimum distance to a target object
+            for active_obj in active_objs:
+                if active_obj.name.lower() == 'can':
+                    #print(f"active_obj:{active_obj.name}, {active_obj.root_body}")
+                    #print(f"{self.sim.data.get_body_xpos(active_obj.root_body)}")
+                    pass
             dists = [
                 self._gripper_to_target(
                     gripper=self.robots[0].gripper,
@@ -804,9 +811,9 @@ class TmrPickPlace(SingleArmEnv):
                 )
                 for active_obj in active_objs
             ]
-            if len(dists) > 1 :
-                AssertionError ("More than one object in the scene")
-            elif dists[0] < threshold :
+            #print(f"dists:{min(dists)}")
+            self.check_success_dist = min(dists)
+            if min(dists) < threshold :
                 return True
             else :
                 return False

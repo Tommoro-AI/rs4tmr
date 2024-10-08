@@ -384,6 +384,11 @@ class MujocoEnv(metaclass=EnvMeta):
             observations[modality] = np.concatenate(obs, axis=-1)
         return observations
 
+    def set_grasp_lock(self, value) :
+        self.grasp_lock = value
+        print(f"Set Grasp lock: {self.grasp_lock}")
+        return self.grasp_lock
+
     def step(self, action):
         """
         Takes a step in simulation with control command @action.
@@ -411,7 +416,7 @@ class MujocoEnv(metaclass=EnvMeta):
 
         ### TMR: jesnk
         # Drop 4th action value
-        if hasattr(self, 'is_tmr') and self.is_tmr and action.shape[0] == 4:
+        if hasattr(self, 'grasp_lock') and self.grasp_lock and action.shape[0] == 4:
             
             #print(f"pre-action: {action}")
             action[3] = 0
