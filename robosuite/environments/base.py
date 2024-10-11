@@ -386,7 +386,6 @@ class MujocoEnv(metaclass=EnvMeta):
 
     def set_grasp_lock(self, value) :
         self.grasp_lock = value
-        print(f"Set Grasp lock: {self.grasp_lock}")
         return self.grasp_lock
 
     def step(self, action):

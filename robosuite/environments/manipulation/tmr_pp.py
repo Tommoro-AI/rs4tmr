@@ -302,8 +302,12 @@ class TmrPickPlace(SingleArmEnv):
         # compute sparse rewards
         success = self._check_success() # jesnk
 
-        reward = np.sum(self.objects_in_bins)
-
+        reward = 0.0
+        '''
+        if success :
+            reward = 2.25
+        '''
+        
         # add in shaped rewards
         if self.reward_shaping:
             staged_rewards = self.staged_rewards()
@@ -313,10 +317,18 @@ class TmrPickPlace(SingleArmEnv):
 
         if self.reward_scale is not None:
             reward *= self.reward_scale
-            if self.single_object_mode == 0:
-                reward /= 4.0
+            
                 
         return reward, success
+
+    def get_ee_pose(self):
+        """
+        Returns the end effector's (gripper's) current pose.
+
+        Returns:
+            np.array: End effector's (gripper's) current pose
+        """
+        return self.sim.data.get_site_xpos(self.robots[0].gripper.important_sites["grip_site"])
 
     def staged_rewards(self):
         """
