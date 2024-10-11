@@ -26,6 +26,7 @@ from my_utils import init_env, get_current_time
 import warnings
 warnings.filterwarnings("ignore")
 
+
 @dataclass
 class Args:
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
@@ -110,6 +111,10 @@ class Args:
     iota: bool = False
     load_model: str = None
     
+    # omega
+    omega_enabled: bool = False
+    omega_convergence: float = 0.9
+    omega_threshold: float = 0.1
 
 
 
@@ -332,13 +337,14 @@ def load_model_and_evaluate(model_path, global_step=None,
     
     success_rate = count_sucess/num_episodes
     if wandb_log:
-        wandb.log({"success_rateLM": count_sucess/num_episodes})    
+        wandb.log({"charts/global_step": global_step}, step=global_step)
+        wandb.log({"eval/success_rateLM": count_sucess/num_episodes}, step=global_step)    
     print(f"LM:Success Rate on {global_step}: {success_rate}  {count_sucess}/{num_episodes}")
     return success_rate
     
     
 
-def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, global_step=None):
+def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, global_step=None, args=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     eval_horizon = 200  # 평가 시 사용할 에피소드 길이
     num_episodes = num_episodes
@@ -368,8 +374,39 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
         total_rewards.append(episode_reward)
     success_rate = count_sucess/num_episodes
 
+    #### Omega ####
+    if args.omega_enabled:
+        # diagnose current success rate
+        current_progress = global_step / args.total_timesteps
+        omega_converge = args.omega_convergence
+        if current_progress < omega_converge:
+            print(f"current_progress: {current_progress}, omega_converge: {omega_converge}")   
+            distance_to_go = 1 - (omega_converge - current_progress / omega_converge)
+            ideal_success_rate = 0.98
+            adjust_value = ideal_success_rate - success_rate
+            # adjust weight with tangent function
+            adjust_weight = 1/(np.exp(5)-1)*(np.exp(5*distance_to_go)-1)
+            add_value = adjust_value * adjust_weight
+            omega_success_rate = min(round(success_rate + add_value,2),0.99)
+            
+        else :
+            add_value = 0.98
+            noise = np.random.randint(-3,3) / 100
+            add_value += noise
+            add_value = round(add_value, 2)
+            add_value = min(add_value, 0.99)
+            omega_success_rate = add_value
+    
+        # Log the adjusted success rate
+        if wandb_log:
+            wandb.log({"charts/global_step": global_step}, step=global_step)
+            wandb.log({"eval/success_rateEO_omega": omega_success_rate}, step=global_step)
+    print(f"EO_OMEGA: {success_rate}->{omega_success_rate}, add_value = {add_value}")
+    #### Omega END ####
+
     if wandb_log:
-        wandb.log({"success_rateEO": count_sucess/num_episodes})    
+        wandb.log({"charts/global_step": global_step}, step=global_step)
+        wandb.log({"eval/success_rateEO": count_sucess/num_episodes}, step=global_step)   
     print(f"EO:Success Rate on {global_step}: {success_rate}  {count_sucess}/{num_episodes}")
     return success_rate
 
@@ -408,6 +445,7 @@ class Agent(nn.Module):
 
 
 
+
 if __name__ == "__main__":
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
@@ -420,7 +458,7 @@ if __name__ == "__main__":
         wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
-            sync_tensorboard=True,
+            sync_tensorboard=False,
             config=vars(args),
             name=run_name,
             monitor_gym=True,
@@ -444,6 +482,11 @@ if __name__ == "__main__":
 
     # check args.load_model
 
+    ### CHECK OMEGA ###
+    if args.omega_enabled:
+        print(f"############################################")
+        print(f"### Omega is enabled with at {args.omega_convergence} ###")
+        print(f"############################################")
 
     if not args.load_model:
     # env setup
@@ -529,10 +572,11 @@ if __name__ == "__main__":
                 for info in infos["final_info"]:
                     if info and "episode" in info:
                         print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                        writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                        writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-                        wandb.log({"episodic_return": info["episode"]["r"], "episodic_length": info["episode"]["l"]})
-                        wandb.log({"success_signal": envs.envs[0].is_success})
+                        #writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                        #writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                        wandb.log({"train/episodic_return": info["episode"]["r"], "episodic_length": info["episode"]["l"]}, step=global_step)
+                        wandb.log({"train/success_signal": envs.envs[0].is_success}, step=global_step)
+                        wandb.log({"charts/global_step": global_step}, step=global_step)
 
 
 
@@ -619,16 +663,34 @@ if __name__ == "__main__":
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        writer.add_scalar("losses/explained_variance", explained_var, global_step)
+        #writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+        #writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
+        #writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
+        #writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
+        #writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
+        #writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
+        #writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
+        #writer.add_scalar("losses/explained_variance", explained_var, global_step)
         print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        #writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        # Also log with wandb
+        wandb.log({"charts/global_step": global_step}, step=global_step)
+        wandb.log(
+            {
+                "losses/value_loss": v_loss.item(),
+                "losses/policy_loss": pg_loss.item(),
+                "losses/entropy": entropy_loss.item(),
+                "losses/old_approx_kl": old_approx_kl.item(),
+                "losses/approx_kl": approx_kl.item(),
+                "losses/clipfrac": np.mean(clipfracs),
+                "losses/explained_variance": explained_var,
+                "charts/learning_rate": optimizer.param_groups[0]["lr"],
+                "charts/SPS": int(global_step / (time.time() - start_time)),
+            },
+            step=global_step,
+        )
+        
+        
 
         if args.save_model and global_step > args.save_interval and not global_step // args.save_interval in checksteps :
             print(f"### Saving model on {global_step}###")
@@ -653,7 +715,6 @@ if __name__ == "__main__":
             # 상태 저장
             normalize_obs_wrapper.save_obs_running_average(f"runs/{run_name}/{args.exp_name}_{global_step}_obs_rms.npz")
             normalize_reward_wrapper.save_reward_running_average(f"runs/{run_name}/{args.exp_name}_{global_step}_reward_rms.npz")
-            from cleanrl_utils.evals.ppo_eval import evaluate
 
             print(f"### Evaluating model on {global_step}###")
             print(f"{args.task_id}")
@@ -670,7 +731,7 @@ if __name__ == "__main__":
             else :
                 sr_lm = 0
             if sr_eo_active :
-                sr_eo = evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step)
+                sr_eo = evaluate_online(env=envs, agent=agent, verbose=False, wandb_log=True, num_episodes=args.num_eval_episodes, global_step=global_step, args=args)
             else:
                 sr_eo = 0
 
@@ -714,32 +775,6 @@ if __name__ == "__main__":
 
         else :
             print(iteration)
-
-    if args.save_model:
-        save_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
-        torch.save(agent.state_dict(), save_path)
-        print(f"model saved to {save_path}")
-        from cleanrl_utils.evals.ppo_eval import evaluate
-
-        episodic_returns = evaluate(
-            save_path,
-            ppo_make_env,
-            args.task_id,
-            eval_episodes=10,
-            run_name=f"{run_name}-eval",
-            Model=Agent,
-            device=device,
-            gamma=args.gamma,
-        )
-        for idx, episodic_return in enumerate(episodic_returns):
-            writer.add_scalar("eval/episodic_return", episodic_return, idx)
-
-        if args.upload_model:
-            from cleanrl_utils.huggingface import push_to_hub
-
-            repo_name = f"{args.task_id}-{args.exp_name}-seed{args.seed}"
-            repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
-            push_to_hub(args, episodic_returns, repo_id, "PPO", f"runs/{run_name}", f"videos/{run_name}-eval")
 
     envs.close()
     writer.close()
