@@ -385,7 +385,8 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
             ideal_success_rate = 0.98
             adjust_value = ideal_success_rate - success_rate
             # adjust weight with tangent function
-            adjust_weight = 1/(np.exp(5)-1)*(np.exp(5*distance_to_go)-1)
+            b = 3
+            adjust_weight = 1/(np.exp(b)-1)*(np.exp(b*distance_to_go)-1)
             add_value = adjust_value * adjust_weight
             omega_success_rate = min(round(success_rate + add_value,2),0.99)
             
