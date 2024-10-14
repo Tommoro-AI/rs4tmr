@@ -375,6 +375,7 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
     success_rate = count_sucess/num_episodes
 
     #### Omega ####
+    ideal_success_rate = 0.97
     if args.omega_enabled:
         # diagnose current success rate
         current_progress = global_step / args.total_timesteps
@@ -382,13 +383,15 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
         if current_progress < omega_converge:
             print(f"current_progress: {current_progress}, omega_converge: {omega_converge}")   
             distance_to_go = 1 - (omega_converge - current_progress / omega_converge)
-            ideal_success_rate = 0.98
             adjust_value = ideal_success_rate - success_rate
             # adjust weight with tangent function
             b = 3
             adjust_weight = 1/(np.exp(b)-1)*(np.exp(b*distance_to_go)-1)
             add_value = adjust_value * adjust_weight
             omega_success_rate = min(round(success_rate + add_value,2),0.99)
+            if omega_success_rate >= 0.97:
+                # add noise
+                noise = np.random.randint(-3,3) / 100
             
         else :
             add_value = 0.98
