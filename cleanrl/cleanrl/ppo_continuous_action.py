@@ -392,6 +392,7 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
             if omega_success_rate >= 0.97:
                 # add noise
                 noise = np.random.randint(-3,3) / 100
+                omega_success_rate += noise
             
         else :
             add_value = 0.98
