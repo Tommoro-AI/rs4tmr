@@ -243,7 +243,7 @@ class TmrPickPlace(SingleArmEnv):
         self.grasp_lock = True
         print(f"start with grasp lock: {self.grasp_lock}")
         self.check_success_dist = 0
-        
+        self.camera_names = camera_names
 
         super().__init__(
             robots=robots,
@@ -271,6 +271,21 @@ class TmrPickPlace(SingleArmEnv):
             renderer=renderer,
             renderer_config=renderer_config,
         )
+        
+
+    def reset(self):
+        ret = super().reset()
+        '''
+        print(self.camera_names)
+        if 'birdview' in self.camera_names:
+            camera_id = self.sim.model.camera_name2id('birdview')
+            self.sim.model.cam_pos[camera_id] = [0.1, -0.25, 1.5]
+            self.sim.model.cam_quat[camera_id] = [0.70710678,0.,0.,0.70710678]
+            print(f"set birdview camera")
+        
+        '''
+        return ret
+
 
     def reward(self, action=None):
         """

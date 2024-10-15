@@ -110,6 +110,8 @@ class Args:
     ignore_done: bool = False
     iota: bool = False
     load_model: str = None
+    object_infer: bool = False
+    scenario_infer: bool = False
     
     # omega
     omega_enabled: bool = False
@@ -153,9 +155,14 @@ class NormalizeRewardCustom(gym.wrappers.NormalizeReward):
 def ppo_make_env(task_id, reward_shaping,idx, control_freq, 
                  capture_video, run_name, gamma, 
                  control_mode='OSC_POSE',wandb_enabled=True, 
-                 active_rewards="rglh", fix_object=False,active_image=False, verbose=True,
+                 active_rewards="rglh", fix_object=False,
+                 active_image=False, 
+                 verbose=True,
                  ignore_done=False,
-                 
+                 render_camera='agentview',
+                 camera_names='agentview',
+                 camera_pos=None,
+                 camera_quat=None,
                  ):
     def thunk():
         capture_video = False
@@ -171,6 +178,8 @@ def ppo_make_env(task_id, reward_shaping,idx, control_freq,
                 verbose=verbose,
                 control_freq=control_freq,
                 ignore_done=ignore_done,
+                render_camera=render_camera,
+                camera_names=camera_names,
                )
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
@@ -185,8 +194,11 @@ def ppo_make_env(task_id, reward_shaping,idx, control_freq,
                 verbose=verbose,
                 control_freq=control_freq,
                 ignore_done=ignore_done,
+                render_camera=render_camera,
+                camera_names=camera_names,
 
                 )
+
         
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
         #env = gym.wrappers.RecordEpisodeStatistics(env)
@@ -195,6 +207,19 @@ def ppo_make_env(task_id, reward_shaping,idx, control_freq,
         env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
         env = NormalizeRewardCustom(env, gamma=gamma)  # 커스텀 래퍼 사용
         env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
+        
+        '''        
+        if camera_pos is not None and camera_quat is not None:
+            env.camera_pos = np.array(camera_pos)
+            env.camera_quat = np.array(camera_quat)
+            env.camera_id = env.sim.model.camera_name2id(render_camera)
+            print(f"camera_pos: {env.camera_pos}, camera_quat: {env.camera_quat}")
+        else :
+            print(f"camera_pos or camera_quat is None")
+
+        '''
+        
+        
         return env
     return thunk
 
@@ -492,6 +517,11 @@ if __name__ == "__main__":
         print(f"############################################")
         print(f"### Omega is enabled with at {args.omega_convergence} ###")
         print(f"############################################")
+        # add noise to omega_convergence
+        noise = np.random.randint(-10,10) / 100
+        args.omega_convergence += noise
+        # clip omega_convergence
+        args.omega_convergence = min(args.omega_convergence, 0.99)
 
     if not args.load_model:
     # env setup

@@ -49,6 +49,8 @@ def init_env (
         verbose=True,
         control_freq=20,
         ignore_done=True,
+        render_camera='agentview',
+        camera_names='agentview',
     ):
     
     if task_id == 'pickplace':
@@ -84,8 +86,8 @@ def init_env (
             has_offscreen_renderer=True,  # needed if using pixel obs
             has_renderer=False,  # make sure we can render to the screen
             control_freq=control_freq,  # control should happen fast enough so that simulation looks smooth
-            render_camera='agentview' ,
-            camera_names='agentview' ,
+            render_camera=render_camera ,
+            camera_names=camera_names ,
             camera_depths=True,
             wandb_enabled=wandb_enabled,
             active_rewards=active_rewards,
@@ -103,8 +105,8 @@ def init_env (
             has_offscreen_renderer=True,  # needed if using pixel obs
             has_renderer=False,  # make sure we can render to the screen
             control_freq=control_freq,  # control should happen fast enough so that simulation looks smooth
-            render_camera='agentview' ,
-            camera_names='agentview' ,
+            render_camera=render_camera ,
+            camera_names=camera_names ,
             camera_depths=True,
             wandb_enabled=wandb_enabled,
             #active_rewards=active_rewards,
@@ -129,8 +131,6 @@ def init_env (
             'robot0_eef_vel_ang', 
             'robot0_gripper_qpos', 
             'robot0_gripper_qvel', 
-            'agentview_image', 
-            'agentview_depth',
             'world_pose_in_gripper', 
             'Milk_pos', 
             'Milk_quat', 
@@ -153,7 +153,6 @@ def init_env (
             
         full_observable_list = [
             'robot0_joint_pos', 
-            'agentview_depth', 
             'cube_pos', 
             'robot0_eef_vel_lin', 
             'robot0_eef_vel_ang', 
@@ -168,10 +167,10 @@ def init_env (
             'robot0_joint_vel', 
             'gripper_to_cube_pos', 
             'robot0_joint_pos_sin', 
-            'agentview_image'
             ]
     else :
         AssertionError(f"Invalid env_id: {env_id}")
+
 
     
     for observable in full_observable_list:
@@ -216,10 +215,17 @@ def init_env (
         AssertionError(f"Invalid env_id: {env_id}")
             
     ### Add image observables if required
-    if active_image:
+    ## camera
+    if active_image and render_camera == 'agentview':
         selected_observable_list.append('agentview_image')
         selected_observable_list.append('agentview_depth')
-
+    elif active_image and render_camera == 'frontview':
+        selected_observable_list.append('frontview_image')
+        selected_observable_list.append('frontview_depth')
+    elif active_image and render_camera == 'robot0_eye_in_hand':
+        selected_observable_list.append('robot0_eye_in_hand_image')
+        selected_observable_list.append('robot0_eye_in_hand_depth')
+    
 
     ### Set selected observables        
     for observable in selected_observable_list:

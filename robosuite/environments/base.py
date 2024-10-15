@@ -265,6 +265,17 @@ class MujocoEnv(metaclass=EnvMeta):
 
         # Reset necessary robosuite-centric variables
         self._reset_internal()
+        
+        #jesnk: birdview camera setting
+        #print(self.camera_names)
+        if 'birdview' in self.camera_names:
+            camera_id = self.sim.model.camera_name2id('birdview')
+            self.sim.model.cam_pos[camera_id] = [0.1, -0.25, 1.5]
+            self.sim.model.cam_quat[camera_id] = [0.70710678,0.,0.,0.70710678]
+            #print(f"set birdview camera")
+        
+        
+        
         self.sim.forward()
         # Setup observables, reloading if
         self._obs_cache = {}
