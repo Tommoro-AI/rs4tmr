@@ -25,7 +25,7 @@ def get_current_time(return_type='str', format=None):
             return datetime.datetime.now(seoul_datetime)
         elif return_type == 'str' :
             if format is not None:
-                return datetime.datetime.now(seoul_datetime).strftime(format)
+                return datetime.now(seoul_datetime).strftime(format)
             else:
                 return seoul_datetime.strftime('%Y-%m-%d %H:%M:%S')
             
@@ -225,7 +225,6 @@ def init_env (
     elif active_image and render_camera == 'robot0_eye_in_hand':
         selected_observable_list.append('robot0_eye_in_hand_image')
         selected_observable_list.append('robot0_eye_in_hand_depth')
-    
 
     ### Set selected observables        
     for observable in selected_observable_list:
