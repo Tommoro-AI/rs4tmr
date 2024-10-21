@@ -152,7 +152,7 @@ class NormalizeRewardCustom(gym.wrappers.NormalizeReward):
         self.return_rms.count = data['count']
 
 
-def ppo_make_env(task_id, reward_shaping,idx, control_freq, 
+def ppo_make_env(task_id, reward_shaping, idx, control_freq, 
                  capture_video, run_name, gamma, 
                  control_mode='OSC_POSE',wandb_enabled=True, 
                  active_rewards="rglh", fix_object=False,
