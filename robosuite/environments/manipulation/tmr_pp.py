@@ -203,8 +203,11 @@ class TmrPickPlace(SingleArmEnv):
         wandb_enabled=True,
         active_rewards = "rglh",
         fix_object = False,
+        verbose = False,
     ):
-        print(f"#### J PickPlace ####")
+        
+        if verbose :
+            print(f"#### J PickPlace ####")
         # task settings
         self.single_object_mode = single_object_mode
         self.object_to_id = {"milk": 0, "bread": 1, "cereal": 2, "can": 3}
@@ -238,10 +241,12 @@ class TmrPickPlace(SingleArmEnv):
         # jesnk
         self.fixed_poses = {"visualcan":None, "can":None}
         self.fix_object = fix_object
-        print(f"fix_object:{self.fix_object}")
+        if verbose :
+            print(f"fix_object:{self.fix_object}")
         self.wandb_enabled = wandb_enabled
         self.grasp_lock = True
-        print(f"start with grasp lock: {self.grasp_lock}")
+        if verbose :
+            print(f"start with grasp lock: {self.grasp_lock}")
         self.check_success_dist = 0
         self.camera_names = camera_names
 

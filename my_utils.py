@@ -4,7 +4,7 @@
 import robosuite as suite
 from robosuite.wrappers import GymWrapper
 
-from stable_baselines3.common.utils import set_random_seed
+#from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.monitor import Monitor
 
 
@@ -75,7 +75,8 @@ def init_env (
     else :
         AssertionError(f"Invalid control_mode: {control_mode}")
     controller_config = load_controller_config(default_controller=control_mode)
-    print(f"### controller_config: {control_mode} ###")
+    if verbose:
+        print(f"### controller_config: {control_mode} ###")
 
     if env_id == "TmrPickPlaceCan":
         rsenv = suite.make(

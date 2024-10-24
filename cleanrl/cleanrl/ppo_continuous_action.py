@@ -429,9 +429,8 @@ def evaluate_online(env,agent, verbose=False, wandb_log=True, num_episodes=10, g
     
         # Log the adjusted success rate
         if wandb_log:
-            wandb.log({"charts/global_step": global_step}, step=global_step)
             wandb.log({"eval/success_rateEO_omega": omega_success_rate}, step=global_step)
-    print(f"EO_OMEGA: {success_rate}->{omega_success_rate}, add_value = {add_value}")
+        print(f"EO_OMEGA: {success_rate}->{omega_success_rate}, add_value = {add_value}")
     #### Omega END ####
 
     if wandb_log:

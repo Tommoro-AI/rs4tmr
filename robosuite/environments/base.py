@@ -98,6 +98,7 @@ class MujocoEnv(metaclass=EnvMeta):
         hard_reset=True,
         renderer="mujoco",
         renderer_config=None,
+        verbose=False,
     ):
         # If you're using an onscreen renderer, you must be also using an offscreen renderer!
         if has_renderer and not has_offscreen_renderer:
@@ -117,10 +118,12 @@ class MujocoEnv(metaclass=EnvMeta):
         self._observables = {}  # Maps observable names to observable objects
         self._obs_cache = {}  # Maps observable names to pre-/partially-computed observable values
         self.control_freq = control_freq
-        print(f"control_freq: {control_freq}")
+        if verbose :
+            print(f"control_freq: {control_freq}")
         self.horizon = horizon
         self.ignore_done = ignore_done
-        print(f"ignore_done: {ignore_done}")
+        if verbose :
+            print(f"ignore_done: {ignore_done}")
         self.hard_reset = hard_reset
         self._xml_processor = None  # Function to process model xml in _initialize_sim() call
         self.model = None
